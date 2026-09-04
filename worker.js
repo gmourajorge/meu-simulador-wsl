@@ -27,12 +27,13 @@ export default {
 
         let html = "";
 
-        // 1. Tenta requisição síncrona rápida em /v1/scrape
+        // 1. Tenta requisição síncrona com renderização de navegador ativa
         const syncRes = await fetch("https://api.anakin.io/v1/scrape", {
           method: "POST",
           headers,
           body: JSON.stringify({
             url: targetURL,
+            useBrowser: true, // Ativa a execução de JavaScript (React)
             formats: ["html", "cleanedHtml"]
           })
         });
@@ -41,13 +42,14 @@ export default {
           const syncData = await syncRes.json();
           html = syncData.cleanedHtml || syncData.html || "";
         } else {
-          // 2. Fallback: cria a tarefa via /v1/url-scraper conforme o Playground
+          // 2. Fallback via url-scraper também com renderização de navegador
           const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
             method: "POST",
             headers,
             body: JSON.stringify({
               url: targetURL,
               country: "us",
+              useBrowser: true, // Ativa a execução de JavaScript
               formats: ["html", "cleanedHtml"]
             })
           });
@@ -63,9 +65,8 @@ export default {
             throw new Error("Não foi possível obter o ID da tarefa no Anakin.");
           }
 
-          // Polling: Aguarda a conclusão da raspagem (até 15s)
           let attempts = 0;
-          while (attempts < 15) {
+          while (attempts < 20) {
             await new Promise(r => setTimeout(r, 1000));
             attempts++;
 
@@ -86,7 +87,7 @@ export default {
           throw new Error("Não foi possível obter o HTML da página após a raspagem.");
         }
 
-        // --- Extração de Baterias do HTML ---
+        // --- Leitura das Baterias ---
         const clean = html.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
         const heatsFound = [];
 
