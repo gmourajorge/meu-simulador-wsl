@@ -69,71 +69,35 @@ export default {
           throw new Error("Tempo limite excedido para obter a resposta.");
         }
 
-        // 1. Limpeza do texto bruto
+        // Normalização do texto bruto
         const cleanContent = content
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-          .replace(/<[^>]+>/g, '\n')
-          .replace(/\r\n|\r/g, '\n');
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ');
 
-        const rawLines = cleanContent.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-        // 2. Regras Rígidas de Validação
-        const isScore = (str) => {
-          if (!/^\d{1,2}\.\d{2}$/.test(str)) return false;
-          const val = parseFloat(str);
-          return val >= 0.0 && val <= 20.0;
-        };
-
-        const isSurferName = (str) => {
-          if (!str || str.length < 3 || str.length > 30) return false;
-          if (/\d/.test(str)) return false; // Nomes de surfistas NÃO possuem números (elimina "1 wave")
-          if (!/^[A-Za-zÀ-ÿ\.\s'-]+$/.test(str)) return false;
-
-          const blacklist = [
-            'wave', 'heat', 'round', 'replay', 'details', 'completed', 'make', 'pick', 
-            'picks', 'fan', 'show', 'results', 'result', 'watch', 'fiji', 'pro', 'clear', 
-            'apply', 'summary', 'product', 'attribute', 'value', 'description', 'image',
-            'tourism', 'airways', 'resort', 'island', 'surf', 'surfline', 'corona', 'cero'
-          ];
-          const lower = str.toLowerCase();
-          return !blacklist.some(word => lower.includes(word));
-        };
-
-        // 3. Filtragem Sequencial de Elementos Validos
-        const validTokens = [];
-        for (const line of rawLines) {
-          if (isScore(line)) {
-            validTokens.push({ type: 'score', value: parseFloat(line) });
-          } else if (isSurferName(line)) {
-            validTokens.push({ type: 'name', value: line });
-          }
-        }
-
-        // 4. Montagem das Baterias (Procura sequência: Nome1 -> Nota1 -> Nome2 -> Nota2)
         const heatsFound = [];
-        for (let i = 0; i < validTokens.length - 3; i++) {
-          if (
-            validTokens[i].type === 'name' &&
-            validTokens[i+1].type === 'score' &&
-            validTokens[i+2].type === 'name' &&
-            validTokens[i+3].type === 'score'
-          ) {
-            const p1 = validTokens[i].value;
-            const score1 = validTokens[i+1].value;
-            const p2 = validTokens[i+2].value;
-            const score2 = validTokens[i+3].value;
 
-            if (p1 !== p2) {
-              let winner = null;
-              if (score1 > score2) winner = p1;
-              else if (score2 > score1) winner = p2;
+        // Captura o padrão nativo WSL: "C. Houshmand 16.87 G. Medina 15.17" ou "S. Moniz 4.0 C. Houshmand 10.17"
+        const heatRegex = /([A-ZÀ-ÿ]\.\s+[A-Za-zÀ-ÿ'-]+)\s+([\d]{1,2}(?:\.[\d]{1,2})?)\s+([A-ZÀ-ÿ]\.\s+[A-Za-zÀ-ÿ'-]+)\s+([\d]{1,2}(?:\.[\d]{1,2})?)/g;
+        let match;
 
-              heatsFound.push({ p1, p2, score1, score2, winner });
-              i += 3; // Salta os 4 elementos processados
-            }
+        while ((match = heatRegex.exec(cleanContent)) !== null) {
+          const p1 = match[1].trim();
+          const score1 = parseFloat(match[2]);
+          const p2 = match[3].trim();
+          const score2 = parseFloat(match[4]);
+
+          // Filtra se os valores numéricos estão na faixa válida de baterias de surfe (0 a 20)
+          if (score1 <= 20.0 && score2 <= 20.0 && p1 !== p2) {
+            let winner = null;
+            if (score1 > score2) winner = p1;
+            else if (score2 > score1) winner = p2;
+
+            heatsFound.push({ p1, p2, score1, score2, winner });
           }
         }
 
+        // Remoção de baterias duplicadas
         const unicos = [];
         const keys = new Set();
         heatsFound.forEach(h => {
