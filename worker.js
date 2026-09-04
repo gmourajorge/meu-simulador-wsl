@@ -25,7 +25,6 @@ export default {
           "Content-Type": "application/json"
         };
 
-        // 1. Criar a tarefa no endpoint oficial do Anakin
         const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
           method: "POST",
           headers,
@@ -48,7 +47,6 @@ export default {
           throw new Error("Não foi possível obter o ID da tarefa no Anakin.");
         }
 
-        // 2. Polling: Aguarda a conclusão da raspagem (até 20 segundos)
         let content = "";
         let attempts = 0;
         while (attempts < 20) {
@@ -68,25 +66,39 @@ export default {
         }
 
         if (!content) {
-          throw new Error("Tempo limite excedido para obter o resultado da página.");
+          throw new Error("Tempo limite excedido para obter a resposta.");
         }
 
-        // 3. Extrator por Regex (Casando notas e atletas)
+        // --- NOVO LEITOR DE LINHAS (IMUNE A QUEBRAS DE TEXTO) ---
+        // Limpa links markdown e tags HTML
+        const cleanText = content
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+          .replace(/<[^>]+>/g, '')
+          .replace(/\r\n|\r/g, '\n');
+
+        const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const heatsFound = [];
-        const heatRegex = /([A-Z]\.\s+[A-Za-z'-]+)\s+([\d.]+)\s+([A-Z]\.\s+[A-Za-z'-]+)\s+([\d.]+)/g;
-        let match;
 
-        while ((match = heatRegex.exec(content)) !== null) {
-          const p1 = match[1].trim();
-          const score1 = parseFloat(match[2]);
-          const p2 = match[3].trim();
-          const score2 = parseFloat(match[4]);
+        for (let i = 0; i < lines.length - 3; i++) {
+          // Procura o padrão: Nome1 -> Nota1 (ex: 16.87) -> Nome2 -> Nota2 (ex: 15.17)
+          const isScore1 = /^[\d]{1,2}\.[\d]{2}$/.test(lines[i+1]);
+          const isScore2 = /^[\d]{1,2}\.[\d]{2}$/.test(lines[i+3]);
 
-          let winner = null;
-          if (score1 > score2) winner = p1;
-          else if (score2 > score1) winner = p2;
+          if (isScore1 && isScore2) {
+            const p1 = lines[i];
+            const score1 = parseFloat(lines[i+1]);
+            const p2 = lines[i+2];
+            const score2 = parseFloat(lines[i+3]);
 
-          heatsFound.push({ p1, p2, score1, score2, winner });
+            // Descarta textos institucionais ou links soltos
+            if (p1.length >= 3 && p2.length >= 3 && !p1.includes('http') && !p2.includes('http')) {
+              let winner = null;
+              if (score1 > score2) winner = p1;
+              else if (score2 > score1) winner = p2;
+
+              heatsFound.push({ p1, p2, score1, score2, winner });
+            }
+          }
         }
 
         const unicos = [];
@@ -99,7 +111,7 @@ export default {
         if (unicos.length === 0) {
           return new Response(JSON.stringify({
             sucesso: false,
-            mensagem: "Página carregada via Anakin, mas o padrão das baterias não foi identificado no texto."
+            mensagem: "Página carregada via Anakin, mas a estrutura das notas não foi reconhecida."
           }), { headers: corsHeaders });
         }
 
