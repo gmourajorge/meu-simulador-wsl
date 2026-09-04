@@ -72,10 +72,14 @@ export default {
         const eventsFound = [];
         const seenIds = new Set();
         let match;
-        let index = 1;
 
         while ((match = eventRegex.exec(markdown)) !== null) {
-          const rawName = match[1].replace(/\\\n/g, ' ').replace(/\n/g, ' ').trim();
+          let rawName = match[1]
+            .replace(/\\\n/g, ' ')
+            .replace(/\n/g, ' ')
+            .replace(/\s*Presented By.*/gi, '') // Remove o texto do patrocinador
+            .trim();
+          
           const eventId = match[2];
           const slug = match[3];
 
@@ -84,18 +88,34 @@ export default {
             eventsFound.push({
               id: `${slug}-${eventId}`,
               wslUrl: `https://www.worldsurfleague.com/events/2026/ct/${eventId}/${slug}/results`,
-              name: `${index}. ${rawName}`,
+              name: rawName,
               eventId: eventId,
               slug: slug
             });
-            index++;
           }
         }
 
+        // Garante a presença de Philippines Pro caso não tenha link direto
+        if (!seenIds.has('444') && markdown.toLowerCase().includes('philippines pro')) {
+          eventsFound.splice(10, 0, {
+            id: "philippines-pro-444",
+            wslUrl: "https://www.worldsurfleague.com/events/2026/ct/444/philippines-pro/results",
+            name: "Philippines Pro",
+            eventId: "444",
+            slug: "philippines-pro"
+          });
+        }
+
+        // Formata os nomes com numeração limpa (1. Nome da Etapa)
+        const eventosFormatados = eventsFound.map((ev, idx) => ({
+          ...ev,
+          name: `${idx + 1}. ${ev.name}`
+        }));
+
         return new Response(JSON.stringify({
           sucesso: true,
-          quantidade: eventsFound.length,
-          eventos: eventsFound
+          quantidade: eventosFormatados.length,
+          eventos: eventosFormatados
         }), { headers: corsHeaders });
 
       } catch (err) {

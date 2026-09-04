@@ -320,56 +320,80 @@
         }
 
         function aplicarBateriasSincronizadas(baterias) {
-            if (!baterias || baterias.length === 0) return;
+			if (!baterias || baterias.length === 0) return;
 
-            const catHeats = currentEvent.heats[currentCategory];
-            const isMasc = currentCategory === 'masculino';
-            const rounds = isMasc ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
+			const catHeats = currentEvent.heats[currentCategory];
 
-            const flatSysHeats = [];
-            rounds.forEach(r => {
-                if (catHeats[r]) {
-                    catHeats[r].forEach(h => flatSysHeats.push(h));
-                }
-            });
+			const getLastName = (name) => {
+				if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
+				const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+				const parts = clean.split(/\s+/);
+				return parts[parts.length - 1];
+			};
 
-            const getLastName = (name) => {
-                if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
-                const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-                const parts = clean.split(/\s+/);
-                return parts[parts.length - 1];
-            };
+			const assignHeat = (sysHeat, ext) => {
+				if (!sysHeat || !ext) return;
+				sysHeat.p1 = ext.p1;
+				sysHeat.p2 = ext.p2;
+				const extWinnerLast = getLastName(ext.winner);
+				if (extWinnerLast) {
+					if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+					else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+					else sysHeat.winner = ext.winner;
+				} else {
+					sysHeat.winner = null;
+				}
+			};
 
-            let totalAtualizadas = 0;
-            const totalToFill = Math.min(baterias.length, flatSysHeats.length);
+			let totalAtualizadas = 0;
 
-            for (let idx = 0; idx < totalToFill; idx++) {
-                const ext = baterias[idx];
-                const sysHeat = flatSysHeats[idx];
+			// Mapeamento exato da árvore da WSL para eventos masculinos de 35 baterias
+			if (baterias.length === 35 && catHeats.r1 && catHeats.r2) {
+				// 1. Round 1 (Índices 0 a 3 da API)
+				for (let i = 0; i < 4; i++) assignHeat(catHeats.r1[i], baterias[i]);
 
-                sysHeat.p1 = ext.p1;
-                sysHeat.p2 = ext.p2;
+				// 2. Grande Final (Índice 4 da API)
+				assignHeat(catHeats.final[0], baterias[4]);
 
-                const extWinnerLast = getLastName(ext.winner);
-                if (extWinnerLast) {
-                    if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
-                    else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
-                    else sysHeat.winner = ext.winner;
-                } else {
-                    sysHeat.winner = null;
-                }
-                totalAtualizadas++;
-            }
+				// 3. Round 2 (Lado A: 5 a 12 | Lado B: 20 a 27)
+				const r2Indices = [5,6,7,8,9,10,11,12, 20,21,22,23,24,25,26,27];
+				r2Indices.forEach((extIdx, sysIdx) => assignHeat(catHeats.r2[sysIdx], baterias[extIdx]));
 
-            if (catHeats.final && catHeats.final[0] && catHeats.final[0].winner) {
-                catHeats.champion = catHeats.final[0].winner;
-            }
+				// 4. Round 3 / Oitavas (Lado A: 13 a 16 | Lado B: 28 a 31)
+				const r3Indices = [13,14,15,16, 28,29,30,31];
+				r3Indices.forEach((extIdx, sysIdx) => assignHeat(catHeats.r3[sysIdx], baterias[extIdx]));
 
-            currentEvent.defined = true;
-            salvarPalpitesLocal();
-            renderBracket();
-            showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
-        }
+				// 5. Quartas de Final (Lado A: 17 e 18 | Lado B: 32 e 33)
+				const qfIndices = [17,18, 32,33];
+				qfIndices.forEach((extIdx, sysIdx) => assignHeat(catHeats.qf[sysIdx], baterias[extIdx]));
+
+				// 6. Semifinais (Lado A: 19 | Lado B: 34)
+				const sfIndices = [19, 34];
+				sfIndices.forEach((extIdx, sysIdx) => assignHeat(catHeats.sf[sysIdx], baterias[extIdx]));
+
+				totalAtualizadas = 35;
+			} else {
+				// Fallback sequencial para etapas parciais ou femininas
+				const rounds = currentCategory === 'masculino' ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
+				const flatSysHeats = [];
+				rounds.forEach(r => { if (catHeats[r]) catHeats[r].forEach(h => flatSysHeats.push(h)); });
+
+				const totalToFill = Math.min(baterias.length, flatSysHeats.length);
+				for (let idx = 0; idx < totalToFill; idx++) {
+					assignHeat(flatSysHeats[idx], baterias[idx]);
+					totalAtualizadas++;
+				}
+			}
+
+			if (catHeats.final && catHeats.final[0] && catHeats.final[0].winner) {
+				catHeats.champion = catHeats.final[0].winner;
+			}
+
+			currentEvent.defined = true;
+			salvarPalpitesLocal();
+			renderBracket();
+			showToast(`✅ ${totalAtualizadas} baterias organizadas com sucesso!`);
+		}
 
         function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }
         
