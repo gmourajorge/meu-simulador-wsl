@@ -28,7 +28,6 @@
         ::-webkit-scrollbar { height: 8px; width: 8px; }
         ::-webkit-scrollbar-track { background: #e2e8f0; }
         ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
         .wsl-header { background-color: #0c1017; color: #fff; padding: 0 16px; height: 48px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; z-index: 10; }
         .wsl-brand { display: flex; align-items: center; gap: 8px; }
@@ -46,10 +45,13 @@
 
         .btn-sync-wsl { background: rgba(2, 132, 199, 0.08); color: var(--wsl-accent); border: 1px solid rgba(2, 132, 199, 0.3); padding: 5px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
         .btn-sync-wsl:hover { background: var(--wsl-accent); color: #fff; }
+        .btn-sync-wsl.disabled { opacity: 0.7; cursor: not-allowed; }
         .btn-reset-all { background: rgba(239, 68, 68, 0.08); color: var(--wsl-red); border: 1px solid rgba(239, 68, 68, 0.3); padding: 5px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-transform: uppercase; }
         .btn-reset-all:hover { background: var(--wsl-red); color: #fff; }
 
         .sync-icon { width: 14px; height: 14px; display: inline-block; flex-shrink: 0; }
+        @keyframes spin-sync { 100% { transform: rotate(360deg); } }
+        .sync-icon.spinning { animation: spin-sync 1s linear infinite; }
 
         .event-details { padding: 8px 12px; background: #ffffff; border-bottom: 1px solid var(--wsl-border-light); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 10; }
         .event-meta h2 { font-size: 1rem; font-weight: 800; text-transform: uppercase; color: var(--wsl-text-dark); }
@@ -60,15 +62,12 @@
         .manual-sync-box h4 { font-size: 0.85rem; color: var(--wsl-accent); margin-bottom: 8px; text-transform: uppercase; font-weight: 800; }
         .manual-sync-box p { font-size: 0.75rem; color: var(--wsl-text-muted); line-height: 1.4; margin-bottom: 10px; }
         .manual-sync-box textarea { width: 100%; padding: 8px; font-family: monospace; font-size: 11px; border: 1px solid var(--wsl-border); border-radius: 4px; margin-bottom: 10px; resize: vertical; outline: none; }
-        .manual-sync-box textarea:focus { border-color: var(--wsl-accent); }
         .btn-extract { background: var(--wsl-green); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; cursor: pointer; text-transform: uppercase; }
-        .btn-extract:hover { background: #059669; }
         .btn-cancel { background: transparent; color: var(--wsl-text-muted); border: 1px solid var(--wsl-border); padding: 6px 12px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; cursor: pointer; text-transform: uppercase; margin-left: 8px; }
-        .btn-cancel:hover { background: #e2e8f0; }
 
         @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 
-        .toast-notification { position: fixed; bottom: 20px; right: 20px; left: 20px; max-width: 400px; margin: 0 auto; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.25); opacity: 0; pointer-events: none; transition: opacity 0.3s ease, transform 0.3s ease; transform: translateY(10px); z-index: 1000; text-align: center; }
+        .toast-notification { position: fixed; bottom: 20px; right: 20px; left: 20px; max-width: 400px; margin: 0 auto; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; opacity: 0; pointer-events: none; transition: 0.3s ease; transform: translateY(10px); z-index: 1000; text-align: center; }
         .toast-notification.show { opacity: 1; transform: translateY(0); }
 
         .bracket-outer-wrapper { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 40px 24px 100px 24px; position: relative; }
@@ -80,8 +79,7 @@
         .center-bracket { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 220px; position: relative; z-index: 2; }
 
         .round-column { width: 200px; display: flex; flex-direction: column; align-items: stretch; }
-        
-        .round-header-floating { position: absolute; bottom: 100%; left: 0; right: 0; text-align: center; font-size: 0.7rem; font-weight: 800; color: var(--wsl-text-muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 5px 4px; background: #e2e8f0; border-radius: 4px; margin-bottom: 8px; pointer-events: none; z-index: 10; }
+        .round-header-floating { position: absolute; bottom: 100%; left: 0; right: 0; text-align: center; font-size: 0.7rem; font-weight: 800; color: var(--wsl-text-muted); text-transform: uppercase; padding: 5px 4px; background: #e2e8f0; border-radius: 4px; margin-bottom: 8px; pointer-events: none; z-index: 10; }
 
         .heats-container { display: grid; grid-template-rows: repeat(8, 1fr); flex: 1; gap: 0; position: relative; }
         .heat-node { display: flex; align-items: center; justify-content: center; position: relative; width: 100%; }
@@ -90,13 +88,10 @@
         .heat-card { background: var(--wsl-card-bg); border: 1px solid var(--wsl-border-light); border-radius: 6px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); width: 100%; }
         .heat-title { background: #f1f5f9; font-size: 0.65rem; font-weight: 800; color: var(--wsl-text-muted); padding: 6px 10px; border-bottom: 1px solid var(--wsl-border-light); text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
         .heat-card.final-card .heat-title { background: var(--wsl-gold); color: #0f172a; font-weight: 900; }
-        
         .btn-reset-heat { background: transparent; border: none; color: var(--wsl-text-muted); cursor: pointer; font-size: 0.8rem; line-height: 1; }
-        .btn-reset-heat:hover { color: var(--wsl-red); }
 
         .surfer-slot { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--wsl-border-light); cursor: pointer; border-left: 4px solid transparent; gap: 8px; }
         .surfer-slot:last-child { border-bottom: none; }
-        .surfer-slot:not(.disabled):hover { background: var(--wsl-card-hover); }
         .surfer-slot.disabled { opacity: 0.45; cursor: not-allowed; }
         .surfer-slot.winner { background: rgba(16, 185, 129, 0.08); border-left-color: var(--wsl-green); }
 
@@ -113,17 +108,24 @@
 
         .champion-card { background: linear-gradient(180deg, #fef3c7 0%, #ffffff 100%); border: 2px solid var(--wsl-gold); border-radius: 8px; text-align: center; padding: 16px; width: 100%; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15); margin-top: 24px; }
         .champion-card h3 { color: #b45309; font-size: 1rem; font-weight: 800; text-transform: uppercase; margin-top: 4px; }
-        
         svg path { fill: none; stroke: var(--line-color); stroke-width: 2px; stroke-linejoin: round; }
+
+        /* Spinner Overlay */
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #ffffff; z-index: 9999; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .loading-overlay.active { opacity: 1; pointer-events: auto; }
+        .spinner { width: 42px; height: 42px; border: 4px solid rgba(255, 255, 255, 0.2); border-top-color: var(--wsl-accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p id="loadingText" style="font-weight: 700; font-size: 0.85rem; letter-spacing: 0.5px;">Carregando...</p>
+    </div>
+
     <header class="wsl-header">
-        <div class="wsl-brand">
-            <span class="wsl-logo">WSL</span>
-            <span class="wsl-title">Championship Tour 2026 (Dynamic)</span>
-        </div>
+        <div class="wsl-brand"><span class="wsl-logo">WSL</span><span class="wsl-title">Championship Tour 2026</span></div>
     </header>
 
     <nav class="wsl-subnav">
@@ -138,12 +140,10 @@
             </div>
         </div>
         <div class="actions-group">
-            <button type="button" class="btn-sync-wsl" id="btnSyncWSL" title="Baixar dados reais da WSL via Anakin">
-                <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8">
-                    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25"/>
-                    <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-linecap="round"/>
-                </svg>
-                Sincronizar WSL
+            <!-- Texto isolado em span para atualização de progresso do Background Sync -->
+            <button type="button" class="btn-sync-wsl" id="btnSyncWSL">
+                <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25"/><path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-linecap="round"/></svg>
+                <span id="btnSyncText">Sincronizar WSL</span>
             </button>
             <button type="button" class="btn-reset-all" id="btnResetAll">↺ Limpar Chave</button>
         </div>
@@ -155,7 +155,7 @@
         <h4>Sincronização Manual (Fallback)</h4>
         <p>1. <a href="#" id="wsl-link" target="_blank" style="color: var(--wsl-accent); font-weight: bold;">Clique aqui para abrir a página da WSL</a> e aperte <b>Ctrl+U</b>.<br>
            2. Aperte <b>Ctrl+A</b> para selecionar tudo e <b>Ctrl+C</b> para copiar.<br>
-           3. Cole o código na caixa abaixo e clique em Extrair.</p>
+           3. Cole o código abaixo e clique em Extrair.</p>
         <textarea id="wsl-source" rows="4" placeholder="Cole o código-fonte HTML aqui..."></textarea>
         <div>
             <button class="btn-extract" onclick="processarHTMLManual()">Extrair Baterias</button>
@@ -175,6 +175,23 @@
         let currentCategory = 'masculino';
         let globalLinksToDraw = [];
 
+        function showLoading(msg = "Carregando...") {
+            const overlay = document.getElementById('loadingOverlay');
+            const text = document.getElementById('loadingText');
+            if (overlay && text) { text.textContent = msg; overlay.classList.add('active'); }
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) overlay.classList.remove('active');
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toastNotification');
+            t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 4000);
+        }
+
         function escapeHTML(str) { return !str ? '' : str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
         function getSurferAvatarHTML(name) {
@@ -189,8 +206,8 @@
             return Array.from({ length: count }, (_, i) => ({ id: `h${i + 1}`, p1: 'Aguardando...', p2: 'Aguardando...', winner: null }));
         }
 
-        async function carregarCalendarioDinamico() {
-            showToast("⏳ Carregando calendário oficial da WSL...");
+        async function cargarCalendarioDinamico() {
+            showLoading("⏳ Carregando calendário oficial CT 2026...");
             try {
                 const response = await fetch('/api-events');
                 const data = await response.json();
@@ -205,36 +222,34 @@
                     }));
                     return true;
                 }
-            } catch (e) {
-                console.error("Erro ao carregar agenda remota:", e);
-            }
+            } catch (e) { console.error("Erro calendário:", e); } 
+            finally { hideLoading(); }
             return false;
         }
 
         function salvarPalpitesLocal() {
             if (!currentEvent) return;
-            const cacheKey = `wsl_picks_2026_${currentEvent.id}`;
-            localStorage.setItem(cacheKey, JSON.stringify(currentEvent.heats));
+            localStorage.setItem(`wsl_picks_2026_${currentEvent.id}`, JSON.stringify(currentEvent.heats));
         }
 
         function carregarPalpitesLocais() {
             if (!currentEvent) return false;
-            const cacheKey = `wsl_picks_2026_${currentEvent.id}`;
-            const savedData = localStorage.getItem(cacheKey);
+            const savedData = localStorage.getItem(`wsl_picks_2026_${currentEvent.id}`);
             if (savedData) {
                 try {
                     currentEvent.heats = JSON.parse(savedData);
                     currentEvent.defined = true;
                     return true;
-                } catch (e) {
-                    console.error("Erro ao ler cache local:", e);
-                }
+                } catch (e) { console.error(e); }
             }
             return false;
         }
 
+        // ==========================================
+        // FLUXO DE INICIALIZAÇÃO E BACKGROUND SYNC
+        // ==========================================
         async function initApp() {
-            const carregou = await carregarCalendarioDinamico();
+            const carregou = await cargarCalendarioDinamico();
             if (!carregou || wslEvents.length === 0) {
                 showToast("⚠️ Não foi possível carregar o calendário remoto.");
                 return;
@@ -242,15 +257,35 @@
 
             currentEvent = wslEvents[0];
             populateSelect();
-            const possuiCache = carregarPalpitesLocais();
+            carregarInterfaceEtapa();
+            window.addEventListener('resize', () => requestAnimationFrame(drawSVGLines));
+
+            // Dispara o download de todas as outras etapas finalizadas silenciosamente
+            startBackgroundSync();
+        }
+
+        async function carregarInterfaceEtapa() {
+            const possuiPalpites = carregarPalpitesLocais();
             recalculateCascades();
             renderBanner();
             renderBracket();
-            window.addEventListener('resize', () => requestAnimationFrame(drawSVGLines));
 
-            if (!possuiCache) {
-                await sincronizarWSLAuto();
+            if (!possuiPalpites) {
+                // Checa se o background sync já baixou o backup nativo da WSL (Melhor Prática)
+                const backupData = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
+                if (backupData) {
+                    aplicarBateriasSincronizadas(JSON.parse(backupData), false); // Aplica o backup e renderiza
+                } else {
+                    await sincronizarWSLAuto(true); // Faz o fetch bloqueante para a etapa atual
+                }
             }
+        }
+
+        function switchCategory(cat) {
+            currentCategory = cat;
+            document.getElementById('btnMasc').classList.toggle('active', cat === 'masculino');
+            document.getElementById('btnFem').classList.toggle('active', cat === 'feminino');
+            carregarInterfaceEtapa();
         }
 
         function populateSelect() {
@@ -262,22 +297,17 @@
             s.addEventListener('change', async e => { 
                 currentEvent = wslEvents.find(ev => ev.id === e.target.value); 
                 document.getElementById('wsl-link').href = currentEvent.wslUrl;
-                
-                const possuiCache = carregarPalpitesLocais();
-                recalculateCascades();
-                renderBanner(); 
-                renderBracket(); 
-
-                if (!possuiCache) {
-                    await sincronizarWSLAuto();
-                }
+                carregarInterfaceEtapa();
             });
-            
             document.getElementById('wsl-link').href = currentEvent.wslUrl;
 
-            document.getElementById('btnMasc').addEventListener('click', () => { currentCategory = 'masculino'; document.getElementById('btnMasc').classList.add('active'); document.getElementById('btnFem').classList.remove('active'); renderBracket(); });
-            document.getElementById('btnFem').addEventListener('click', () => { currentCategory = 'feminino'; document.getElementById('btnFem').classList.add('active'); document.getElementById('btnMasc').classList.remove('active'); renderBracket(); });
-            document.getElementById('btnResetAll').addEventListener('click', () => { if(confirm("Resetar chaves?")) { resetBracket(); renderBracket(); } });
+            document.getElementById('btnMasc').addEventListener('click', () => switchCategory('masculino'));
+            document.getElementById('btnFem').addEventListener('click', () => switchCategory('feminino'));
+            
+            // RESET INTELIGENTE
+            document.getElementById('btnResetAll').addEventListener('click', () => { 
+                if(confirm("Deseja apagar os resultados e voltar a simular do Round 1?")) resetBracketInteligente(); 
+            });
             
             document.getElementById('bracketContainer').addEventListener('click', e => {
                 if (e.target.closest('.btn-reset-heat')) {
@@ -285,150 +315,214 @@
                     resetSingleHeat(btn.dataset.round, parseInt(btn.dataset.heat));
                 }
                 const slot = e.target.closest('.surfer-slot:not(.disabled)');
-                if (slot) {
-                    setWinner(slot.dataset.round, parseInt(slot.dataset.heat), parseInt(slot.dataset.slot));
-                }
+                if (slot) setWinner(slot.dataset.round, parseInt(slot.dataset.heat), parseInt(slot.dataset.slot));
             });
 
-            document.getElementById('btnSyncWSL').addEventListener('click', sincronizarWSLAuto);
+            document.getElementById('btnSyncWSL').addEventListener('click', () => sincronizarWSLAuto(true));
         }
 
-        function showToast(msg) {
-            const t = document.getElementById('toastNotification');
-            t.textContent = msg; t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 4000);
+        // ==========================================
+        // 1. BACKGROUND SYNC COMPLETO (Melhor Prática)
+        // ==========================================
+        async function startBackgroundSync() {
+            const syncIcon = document.querySelector('.sync-icon');
+            const btnText = document.getElementById('btnSyncText');
+            let toSync = [];
+            
+            // Verifica o que falta sincronizar (ignorando eventos falhos/futuros marcados)
+            for (let ev of wslEvents) {
+                ['masculino', 'feminino'].forEach(cat => {
+                    if (!localStorage.getItem(`wsl_api_backup_${cat}_${ev.id}`) && !localStorage.getItem(`wsl_api_failed_${cat}_${ev.id}`)) {
+                        toSync.push({ev, cat});
+                    }
+                });
+            }
+            if (toSync.length === 0) return;
+
+            syncIcon.classList.add('spinning');
+            
+            let count = 0;
+            for (let task of toSync) {
+                count++;
+                btnText.textContent = `Baixando Temporada... ${Math.round((count/toSync.length)*100)}%`;
+                
+                try {
+                    let res = await fetch(`/api-wsl?url=${encodeURIComponent(task.ev.wslUrl)}&cat=${task.cat}`);
+                    let data = await res.json();
+                    if (data.sucesso && data.baterias && data.baterias.length > 0) {
+                        // Salva o backup nativo permanentemente
+                        localStorage.setItem(`wsl_api_backup_${task.cat}_${task.ev.id}`, JSON.stringify(data.baterias));
+                        
+                        // Atualiza a tela se o usuário estiver parado nela vazia
+                        if (currentEvent.id === task.ev.id && currentCategory === task.cat) {
+                            const isEmpty = Object.values(currentEvent.heats[task.cat]).every(r => Array.isArray(r) && r.every(h => h.p1 === 'Aguardando...'));
+                            if (isEmpty) aplicarBateriasSincronizadas(data.baterias, false);
+                        }
+                    } else {
+                        // Marca como falha ou evento futuro para não spammar requisições a cada reload
+                        localStorage.setItem(`wsl_api_failed_${task.cat}_${task.ev.id}`, 'true');
+                    }
+                } catch(e) {}
+            }
+
+            syncIcon.classList.remove('spinning');
+            btnText.textContent = "Sincronizar WSL";
+            showToast("✅ Todas as etapas concluídas foram baixadas!");
         }
 
-        async function sincronizarWSLAuto() {
-            showToast("⏳ Conectando à WSL via Anakin.io...");
+        async function sincronizarWSLAuto(showUI = true) {
+            if(showUI) showLoading(`⏳ Buscando resultados na WSL (${currentCategory.toUpperCase()})...`);
             try {
                 const response = await fetch(`/api-wsl?url=${encodeURIComponent(currentEvent.wslUrl)}&cat=${currentCategory}`);
                 const data = await response.json();
 
                 if (!data.sucesso || !data.baterias || data.baterias.length === 0) {
-                    showToast(`⚠️ ${data.mensagem || 'Baterias não encontradas.'} Abrindo modo manual...`);
-                    document.getElementById('manualSyncBox').classList.add('active');
+                    if (showUI) {
+                        showToast(`⚠️ Baterias não encontradas. Abrindo modo manual...`);
+                        document.getElementById('manualSyncBox').classList.add('active');
+                    }
                     return;
                 }
-
-                aplicarBateriasSincronizadas(data.baterias);
+                aplicarBateriasSincronizadas(data.baterias, true); // True salva no backup principal
             } catch (err) {
-                console.error("Erro na busca automática:", err);
-                showToast("⚠️ Falha na conexão automática. Abrindo modo manual...");
-                document.getElementById('manualSyncBox').classList.add('active');
+                if (showUI) {
+                    showToast("⚠️ Falha na conexão automática. Abrindo modo manual...");
+                    document.getElementById('manualSyncBox').classList.add('active');
+                }
+            } finally {
+                if(showUI) hideLoading();
             }
         }
 
-        function aplicarBateriasSincronizadas(baterias) {
-			if (!baterias || baterias.length === 0) return;
+        // ==========================================
+        // 2. RESET INTELIGENTE (Mantém Round 1 e 2)
+        // ==========================================
+        function resetBracketInteligente() {
+            const catHeats = currentEvent.heats[currentCategory];
+            const backupStr = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
 
-			const catHeats = currentEvent.heats[currentCategory];
-			if (!catHeats) return;
+            // Zera Tudo
+            Object.values(catHeats).forEach(r => Array.isArray(r) && r.forEach(h => {
+                h.p1 = 'Aguardando...'; h.p2 = 'Aguardando...'; h.winner = null;
+            }));
+            catHeats.champion = null;
 
-			const getLastName = (name) => {
-				if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
-				const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-				const parts = clean.split(/\s+/);
-				return parts[parts.length - 1];
-			};
+            // Restaura APENAS os Atletas Originais (Sem Vencedores) das rodadas preliminares
+            if (backupStr) {
+                const baterias = JSON.parse(backupStr);
+                
+                if (currentCategory === 'masculino' && baterias.length === 35) {
+                    for (let i = 0; i < 4; i++) {
+                        catHeats.r1[i].p1 = baterias[i].p1; catHeats.r1[i].p2 = baterias[i].p2;
+                    }
+                    const r2Indices = [5,6,7,8,9,10,11,12, 20,21,22,23,24,25,26,27];
+                    r2Indices.forEach((extIdx, sysIdx) => {
+                        catHeats.r2[sysIdx].p1 = baterias[extIdx].p1; catHeats.r2[sysIdx].p2 = baterias[extIdx].p2;
+                    });
+                } else {
+                    const r1Limit = Math.min(baterias.length, catHeats.r1.length);
+                    for(let i = 0; i < r1Limit; i++){
+                        catHeats.r1[i].p1 = baterias[i].p1; catHeats.r1[i].p2 = baterias[i].p2;
+                    }
+                    const r2Limit = Math.min(baterias.length - catHeats.r1.length, catHeats.r2.length);
+                    for(let i = 0; i < r2Limit; i++){
+                        if(baterias[catHeats.r1.length + i]) {
+                            catHeats.r2[i].p1 = baterias[catHeats.r1.length + i].p1;
+                            catHeats.r2[i].p2 = baterias[catHeats.r1.length + i].p2;
+                        }
+                    }
+                }
+            }
 
-			const assignHeat = (sysHeat, ext) => {
-				if (!sysHeat || !ext) return;
-				sysHeat.p1 = ext.p1 || 'Aguardando...';
-				sysHeat.p2 = ext.p2 || 'Aguardando...';
-				const extWinnerLast = getLastName(ext.winner);
-				if (extWinnerLast) {
-					if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
-					else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
-					else sysHeat.winner = ext.winner;
-				} else {
-					sysHeat.winner = null;
-				}
-			};
-
-			let totalAtualizadas = 0;
-
-			// Apenas aplica o mapeamento especial de 35 baterias se a categoria for estritamente MASCULINO
-			if (currentCategory === 'masculino' && baterias.length === 35 && catHeats.r1 && catHeats.r2 && catHeats.r3) {
-				for (let i = 0; i < 4; i++) assignHeat(catHeats.r1[i], baterias[i]);
-				assignHeat(catHeats.final[0], baterias[4]);
-
-				const r2Indices = [5,6,7,8,9,10,11,12, 20,21,22,23,24,25,26,27];
-				r2Indices.forEach((extIdx, sysIdx) => assignHeat(catHeats.r2[sysIdx], baterias[extIdx]));
-
-				const r3Indices = [13,14,15,16, 28,29,30,31];
-				r3Indices.forEach((extIdx, sysIdx) => assignHeat(catHeats.r3[sysIdx], baterias[extIdx]));
-
-				const qfIndices = [17,18, 32,33];
-				qfIndices.forEach((extIdx, sysIdx) => assignHeat(catHeats.qf[sysIdx], baterias[extIdx]));
-
-				const sfIndices = [19, 34];
-				sfIndices.forEach((extIdx, sysIdx) => assignHeat(catHeats.sf[sysIdx], baterias[extIdx]));
-
-				totalAtualizadas = 35;
-			} else {
-				// Preenchimento sequencial seguro para Categoria Feminina ou chaves menores
-				const rounds = currentCategory === 'masculino' 
-					? ['r1','r2','r3','qf','sf','final'] 
-					: ['r1','r2','qf','sf','final'];
-
-				const flatSysHeats = [];
-				rounds.forEach(r => {
-					if (catHeats[r] && Array.isArray(catHeats[r])) {
-						catHeats[r].forEach(h => flatSysHeats.push(h));
-					}
-				});
-
-				const totalToFill = Math.min(baterias.length, flatSysHeats.length);
-				for (let idx = 0; idx < totalToFill; idx++) {
-					assignHeat(flatSysHeats[idx], baterias[idx]);
-					totalAtualizadas++;
-				}
-			}
-
-			if (catHeats.final && catHeats.final[0] && catHeats.final[0].winner) {
-				catHeats.champion = catHeats.final[0].winner;
-			}
-
-			currentEvent.defined = true;
-			salvarPalpitesLocal();
-			renderBracket();
-			showToast(`✅ ${totalAtualizadas} baterias organizadas com sucesso!`);
-		}
-
-        function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }
-        
-        function resetSingleHeat(round, idx) { 
-            currentEvent.heats[currentCategory][round][idx].winner = null; 
-            recalculateCascades(); 
-            salvarPalpitesLocal();
-            renderBracket(); 
-        }
-        
-        function resetBracket() { 
-            Object.values(currentEvent.heats[currentCategory]).forEach(r => Array.isArray(r) && r.forEach(h => h.winner = null)); 
-            currentEvent.heats[currentCategory].champion = null; 
-            recalculateCascades(); 
-            salvarPalpitesLocal();
-            renderBracket();
-        }
-        
-        function setWinner(round, heatIdx, slot) {
-            const hd = currentEvent.heats[currentCategory][round][heatIdx];
-            const name = slot === 1 ? hd.p1 : hd.p2;
-            if(!name || name.includes('Vencedor') || name === 'Aguardando...') return;
-            hd.winner = name;
             recalculateCascades();
             salvarPalpitesLocal();
             renderBracket();
+            showToast("🔄 Chave restaurada! Palpites limpos, mas chaveamento mantido.");
         }
+
+        // ==========================================
+        // LÓGICA CORE DE ALOCAÇÃO
+        // ==========================================
+        function aplicarBateriasSincronizadas(baterias, saveBackup = true) {
+            if (!baterias || baterias.length === 0) return;
+
+            // Grava na base imutável para uso no Reset Inteligente
+            if (saveBackup) {
+                localStorage.setItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`, JSON.stringify(baterias));
+            }
+
+            const catHeats = currentEvent.heats[currentCategory];
+            if (!catHeats) return;
+
+            const getLastName = (name) => {
+                if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
+                const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                const parts = clean.split(/\s+/);
+                return parts[parts.length - 1];
+            };
+
+            const assignHeat = (sysHeat, ext) => {
+                if (!sysHeat || !ext) return;
+                sysHeat.p1 = ext.p1 || 'Aguardando...';
+                sysHeat.p2 = ext.p2 || 'Aguardando...';
+                const extWinnerLast = getLastName(ext.winner);
+                if (extWinnerLast) {
+                    if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+                    else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+                    else sysHeat.winner = ext.winner;
+                } else { sysHeat.winner = null; }
+            };
+
+            let totalAtualizadas = 0;
+
+            if (currentCategory === 'masculino' && baterias.length === 35 && catHeats.r1 && catHeats.r2 && catHeats.r3) {
+                for (let i = 0; i < 4; i++) assignHeat(catHeats.r1[i], baterias[i]);
+                if (catHeats.final) assignHeat(catHeats.final[0], baterias[4]);
+
+                const r2Indices = [5,6,7,8,9,10,11,12, 20,21,22,23,24,25,26,27];
+                r2Indices.forEach((extIdx, sysIdx) => { if (catHeats.r2[sysIdx]) assignHeat(catHeats.r2[sysIdx], baterias[extIdx]); });
+
+                const r3Indices = [13,14,15,16, 28,29,30,31];
+                r3Indices.forEach((extIdx, sysIdx) => { if (catHeats.r3[sysIdx]) assignHeat(catHeats.r3[sysIdx], baterias[extIdx]); });
+
+                const qfIndices = [17,18, 32,33];
+                qfIndices.forEach((extIdx, sysIdx) => { if (catHeats.qf[sysIdx]) assignHeat(catHeats.qf[sysIdx], baterias[extIdx]); });
+
+                const sfIndices = [19, 34];
+                sfIndices.forEach((extIdx, sysIdx) => { if (catHeats.sf[sysIdx]) assignHeat(catHeats.sf[sysIdx], baterias[extIdx]); });
+                totalAtualizadas = 35;
+            } else {
+                const rounds = currentCategory === 'masculino' ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
+                const flatSysHeats = [];
+                rounds.forEach(r => {
+                    if (catHeats[r] && Array.isArray(catHeats[r])) catHeats[r].forEach(h => flatSysHeats.push(h));
+                });
+
+                const totalToFill = Math.min(baterias.length, flatSysHeats.length);
+                for (let idx = 0; idx < totalToFill; idx++) {
+                    assignHeat(flatSysHeats[idx], baterias[idx]);
+                    totalAtualizadas++;
+                }
+            }
+
+            if (catHeats.final && catHeats.final[0] && catHeats.final[0].winner) catHeats.champion = catHeats.final[0].winner;
+
+            currentEvent.defined = true;
+            salvarPalpitesLocal();
+            renderBracket();
+            if(saveBackup) showToast(`✅ ${totalAtualizadas} baterias organizadas com sucesso!`);
+        }
+
+        function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }
+        function resetSingleHeat(round, idx) { currentEvent.heats[currentCategory][round][idx].winner = null; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
+        function setWinner(round, heatIdx, slot) { const hd = currentEvent.heats[currentCategory][round][heatIdx]; const name = slot === 1 ? hd.p1 : hd.p2; if(!name || name.includes('Vencedor') || name === 'Aguardando...') return; hd.winner = name; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
 
         function recalculateCascades() {
             const cd = currentEvent.heats[currentCategory];
             if(cd.r1) cd.r1.forEach((h, i) => {
                 const w = h.winner;
-                if(currentCategory === 'masculino' && cd.r2[[8,5,2,12][i]]) updateSlot(cd.r2[[8,5,2,12][i]], 'p2', w ? w : `Vencedor R1 H${i+1}`);
-                if(currentCategory === 'feminino' && cd.r2[[4,0,2,6,1,7,3,5][i]]) updateSlot(cd.r2[[4,0,2,6,1,7,3,5][i]], 'p2', w ? w : `Vencedora R1 H${i+1}`);
+                if(currentCategory === 'masculino' && cd.r2 && cd.r2[[8,5,2,12][i]]) updateSlot(cd.r2[[8,5,2,12][i]], 'p2', w ? w : `Vencedor R1 H${i+1}`);
+                if(currentCategory === 'feminino' && cd.r2 && cd.r2[[4,0,2,6,1,7,3,5][i]]) updateSlot(cd.r2[[4,0,2,6,1,7,3,5][i]], 'p2', w ? w : `Vencedora R1 H${i+1}`);
             });
             ['r2','r3','qf','sf'].forEach((rnd, step) => {
                 if(!cd[rnd]) return;
@@ -446,9 +540,7 @@
             }
         }
 
-        function renderBanner() {
-            document.getElementById('eventBanner').innerHTML = `<div class="event-meta"><h2>${currentEvent.name}</h2><p>🔗 ${currentEvent.wslUrl}</p></div>`;
-        }
+        function renderBanner() { document.getElementById('eventBanner').innerHTML = `<div class="event-meta"><h2>${currentEvent.name}</h2><p>🔗 ${currentEvent.wslUrl}</p></div>`; }
 
         function createHeatHTML(heat, round, idx, isFinal) {
             const v1 = heat.p1 && !heat.p1.includes('Vencedor') && heat.p1 !== 'Aguardando...';
@@ -554,7 +646,6 @@
             container.appendChild(leftDiv);
             container.appendChild(centerDiv);
             container.appendChild(rightDiv);
-
             setTimeout(drawSVGLines, 50);
         }
 
@@ -562,38 +653,76 @@
             const svg = document.getElementById('svg-lines-layer');
             const container = document.getElementById('bracketContainer');
             if(!svg || !container) return;
-            
             const containerRect = container.getBoundingClientRect();
             svg.setAttribute('width', containerRect.width);
             svg.setAttribute('height', containerRect.height);
             svg.innerHTML = '';
             let pathsHTML = '';
-
             globalLinksToDraw.forEach(link => {
-                const el1 = document.getElementById(link.from);
-                const el2 = document.getElementById(link.to);
+                const el1 = document.getElementById(link.from); const el2 = document.getElementById(link.to);
                 if(!el1 || !el2) return;
-
-                const r1 = el1.getBoundingClientRect();
-                const r2 = el2.getBoundingClientRect();
-
-                const y1 = (r1.top + (r1.height / 2)) - containerRect.top;
-                const y2 = (r2.top + (r2.height / 2)) - containerRect.top;
-
+                const r1 = el1.getBoundingClientRect(); const r2 = el2.getBoundingClientRect();
+                const y1 = (r1.top + (r1.height / 2)) - containerRect.top; const y2 = (r2.top + (r2.height / 2)) - containerRect.top;
                 if (link.dir === 'right') {
-                    const x1 = (r1.right - containerRect.left);
-                    const x2 = (r2.left - containerRect.left);
-                    const midX = x1 + ((x2 - x1) / 2);
+                    const x1 = (r1.right - containerRect.left); const x2 = (r2.left - containerRect.left); const midX = x1 + ((x2 - x1) / 2);
                     pathsHTML += `<path d="M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}" />`;
                 } else {
-                    const x1 = (r1.left - containerRect.left);
-                    const x2 = (r2.right - containerRect.left);
-                    const midX = x1 - ((x1 - x2) / 2);
+                    const x1 = (r1.left - containerRect.left); const x2 = (r2.right - containerRect.left); const midX = x1 - ((x1 - x2) / 2);
                     pathsHTML += `<path d="M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}" />`;
                 }
             });
-
             svg.innerHTML = pathsHTML;
+        }
+
+        // Retorno do scrap manual
+        function processarHTMLManual() {
+            const html = document.getElementById('wsl-source').value;
+            if (!html || html.length < 100) { showToast("⚠️ Por favor, cole o código-fonte válido."); return; }
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const heats = doc.querySelectorAll('.hot-heat, .post-event-watch-heat, .bracket-heat, [class*="Heat_container"], [class*="Match"]');
+                if (heats.length === 0) { showToast("⚠️ Nenhuma bateria encontrada no HTML."); return; }
+
+                const extractedHeats = [];
+                function getCleanName(athleteEl) {
+                    const img = athleteEl.querySelector('img[alt]');
+                    if (img && img.alt && img.alt.length > 3 && !img.alt.toLowerCase().match(/flag|avatar|logo/)) return img.alt.trim();
+                    const clone = athleteEl.cloneNode(true);
+                    clone.querySelectorAll('.hot-heat-athlete__name--short, .athlete-country-name, .hot-heat-athlete__seed, .total, .score, [class*="Score"]').forEach(e => e.remove());
+                    const full = clone.querySelector('.hot-heat-athlete__name--full, [class*="FullName"]');
+                    if (full) return full.textContent.trim();
+                    const link = clone.querySelector('a');
+                    if (link) return link.textContent.trim().replace(/\s{2,}/g, ' ');
+                    return clone.textContent.replace(/[0-9.]/g, '').replace(/[\n\r\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim() || 'Aguardando...';
+                }
+
+                heats.forEach(heatEl => {
+                    const athletes = heatEl.querySelectorAll('.hot-heat-athlete, .post-event-watch-heat-athlete, .bracket-athlete, [class*="Athlete_container"], [class*="Participant"]');
+                    if (athletes.length >= 2) {
+                        let p1 = getCleanName(athletes[0]); let p2 = getCleanName(athletes[1]);
+                        if (p1.match(/tbd|tbc/i)) p1 = 'Aguardando...'; if (p2.match(/tbd|tbc/i)) p2 = 'Aguardando...';
+                        if (p1 === 'Aguardando...' && p2 === 'Aguardando...') return;
+
+                        let winner = null;
+                        if (p1 !== 'Aguardando...' && p2 !== 'Aguardando...' && p1 !== p2) {
+                            const isWin1 = athletes[0].className.match(/is-advancing|is-winner|winner/i) || athletes[0].querySelector('.is-advancing, .is-winner, .color-red, .hot-heat-athlete__difference');
+                            const isWin2 = athletes[1].className.match(/is-advancing|is-winner|winner/i) || athletes[1].querySelector('.is-advancing, .is-winner, .color-red, .hot-heat-athlete__difference');
+                            if (isWin1 && !isWin2) winner = p1;
+                            else if (isWin2 && !isWin1) winner = p2;
+                            else {
+                                const s1 = parseFloat(athletes[0].querySelector('.total, .score, [class*="Score"]')?.textContent) || 0;
+                                const s2 = parseFloat(athletes[1].querySelector('.total, .score, [class*="Score"]')?.textContent) || 0;
+                                if (s1 > s2) winner = p1; else if (s2 > s1) winner = p2;
+                            }
+                        }
+                        extractedHeats.push({ p1, p2, winner });
+                    }
+                });
+                aplicarBateriasSincronizadas(extractedHeats);
+                document.getElementById('manualSyncBox').classList.remove('active');
+                document.getElementById('wsl-source').value = '';
+            } catch(err) { showToast("⚠️ Erro técnico na leitura do HTML."); }
         }
 
         document.addEventListener('DOMContentLoaded', initApp);
