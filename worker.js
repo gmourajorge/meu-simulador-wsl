@@ -69,7 +69,6 @@ export default {
           throw new Error("Tempo limite excedido para obter a resposta.");
         }
 
-        // --- NOVO LEITOR DE LINHAS (IMUNE A QUEBRAS DE TEXTO) ---
         // Limpa links markdown e tags HTML
         const cleanText = content
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
@@ -79,25 +78,32 @@ export default {
         const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const heatsFound = [];
 
+        // Validador de Nomes Reais (descarta termos como "1 wave", "Details", "Replay", etc.)
+        const isSurferName = (str) => {
+          if (!str || str.length < 3 || str.length > 30) return false;
+          const lower = str.toLowerCase();
+          const invalidWords = ['wave', 'heat', 'round', 'replay', 'details', 'completed', 'make', 'pick', 'fan', 'show', 'result', 'watch', 'fiji', 'pro', 'clear', 'apply', 'summary'];
+          if (invalidWords.some(w => lower.includes(w))) return false;
+          return /^[A-Za-z\.\s'-]+$/.test(str);
+        };
+
         for (let i = 0; i < lines.length - 3; i++) {
-          // Procura o padrão: Nome1 -> Nota1 (ex: 16.87) -> Nome2 -> Nota2 (ex: 15.17)
-          const isScore1 = /^[\d]{1,2}\.[\d]{2}$/.test(lines[i+1]);
-          const isScore2 = /^[\d]{1,2}\.[\d]{2}$/.test(lines[i+3]);
+          const p1 = lines[i];
+          const s1 = lines[i+1];
+          const p2 = lines[i+2];
+          const s2 = lines[i+3];
 
-          if (isScore1 && isScore2) {
-            const p1 = lines[i];
-            const score1 = parseFloat(lines[i+1]);
-            const p2 = lines[i+2];
-            const score2 = parseFloat(lines[i+3]);
+          const isScore1 = /^[\d]{1,2}\.[\d]{2}$/.test(s1);
+          const isScore2 = /^[\d]{1,2}\.[\d]{2}$/.test(s2);
 
-            // Descarta textos institucionais ou links soltos
-            if (p1.length >= 3 && p2.length >= 3 && !p1.includes('http') && !p2.includes('http')) {
-              let winner = null;
-              if (score1 > score2) winner = p1;
-              else if (score2 > score1) winner = p2;
+          if (isScore1 && isScore2 && isSurferName(p1) && isSurferName(p2)) {
+            const score1 = parseFloat(s1);
+            const score2 = parseFloat(s2);
+            let winner = null;
+            if (score1 > score2) winner = p1;
+            else if (score2 > score1) winner = p2;
 
-              heatsFound.push({ p1, p2, score1, score2, winner });
-            }
+            heatsFound.push({ p1, p2, score1, score2, winner });
           }
         }
 

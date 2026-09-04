@@ -354,7 +354,7 @@
 			const catHeats = currentEvent.heats[currentCategory];
 			
 			const getLastName = (name) => {
-				if (!name) return '';
+				if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
 				const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 				const parts = clean.split(/\s+/);
 				return parts[parts.length - 1];
@@ -370,6 +370,8 @@
 				const extLast2 = getLastName(ext.p2);
 				const extWinnerLast = getLastName(ext.winner);
 
+				if (!extLast1 || !extLast2) return;
+
 				for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
 					if (!catHeats[r]) continue;
 
@@ -379,21 +381,41 @@
 						const sysLast1 = getLastName(sysHeat.p1);
 						const sysLast2 = getLastName(sysHeat.p2);
 
-						// Verifica se pelo menos um atleta coincide ou se a vaga estava em "Aguardando..."
-						const matchP1 = sysLast1 && (sysLast1 === extLast1 || sysLast1 === extLast2);
-						const matchP2 = sysLast2 && (sysLast2 === extLast1 || sysLast2 === extLast2);
-						const isWaiting = sysHeat.p1 === 'Aguardando...' || sysHeat.p2 === 'Aguardando...';
+						const matchDirect = (sysLast1 && sysLast1 === extLast1) && (sysLast2 && sysLast2 === extLast2);
+						const matchReverse = (sysLast1 && sysLast1 === extLast2) && (sysLast2 && sysLast2 === extLast1);
 
-						if (matchP1 || matchP2 || isWaiting) {
-							// Atualiza os nomes no simulador com os atletas reais da WSL (substitutos/wildcards)
-							sysHeat.p1 = ext.p1;
-							sysHeat.p2 = ext.p2;
+						// Caso 1: Ambos os surfistas batem com a bateria cadastrada
+						if (matchDirect || matchReverse) {
+							if (extWinnerLast) {
+								if (sysLast1 === extWinnerLast) sysHeat.winner = sysHeat.p1;
+								else if (sysLast2 === extWinnerLast) sysHeat.winner = sysHeat.p2;
+							}
+							atualizou = true;
+							atualizadas++;
+							break;
+						}
 
+						// Caso 2: Um surfista bate e o outro era "Aguardando..." (preenchendo vagas de próximas fases)
+						const p1Waiting = !sysLast1;
+						const p2Waiting = !sysLast2;
+
+						if (sysLast1 && p2Waiting && (sysLast1 === extLast1 || sysLast1 === extLast2)) {
+							sysHeat.p2 = (sysLast1 === extLast1) ? ext.p2 : ext.p1;
 							if (extWinnerLast) {
 								if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
 								else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
 							}
+							atualizou = true;
+							atualizadas++;
+							break;
+						}
 
+						if (sysLast2 && p1Waiting && (sysLast2 === extLast1 || sysLast2 === extLast2)) {
+							sysHeat.p1 = (sysLast2 === extLast1) ? ext.p1 : ext.p2;
+							if (extWinnerLast) {
+								if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+								else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+							}
 							atualizou = true;
 							atualizadas++;
 							break;
@@ -406,7 +428,7 @@
 			currentEvent.defined = true;
 			recalculateCascades();
 			renderBracket();
-			showToast(`✅ ${atualizadas} baterias atualizadas (com atletas/substitutos reais)!`);
+			showToast(`✅ ${atualizadas} baterias atualizadas com sucesso!`);
 		}
 
         function processarHTMLManual() {
