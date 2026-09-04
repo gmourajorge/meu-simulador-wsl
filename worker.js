@@ -69,42 +69,30 @@ export default {
           throw new Error("Tempo limite excedido para obter a resposta.");
         }
 
-        // Limpa links markdown e tags HTML
-        const cleanText = content
+        // 1. Remove links markdown, tags HTML e botões repetitivos da WSL
+        const cleanContent = content
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-          .replace(/<[^>]+>/g, '')
-          .replace(/\r\n|\r/g, '\n');
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/Make heat picks|\*Fan picks|Details|Replay|Watch [^M\n]+/gi, '')
+          .replace(/\s+/g, ' '); // Normaliza quebras de linha e múltiplos espaços em um único espaço
 
-        const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const heatsFound = [];
 
-        // Validador de Nomes Reais (descarta termos como "1 wave", "Details", "Replay", etc.)
-        const isSurferName = (str) => {
-          if (!str || str.length < 3 || str.length > 30) return false;
-          const lower = str.toLowerCase();
-          const invalidWords = ['wave', 'heat', 'round', 'replay', 'details', 'completed', 'make', 'pick', 'fan', 'show', 'result', 'watch', 'fiji', 'pro', 'clear', 'apply', 'summary'];
-          if (invalidWords.some(w => lower.includes(w))) return false;
-          return /^[A-Za-z\.\s'-]+$/.test(str);
-        };
+        // 2. Regex global imune a quebras de linha (Captura: "C. Houshmand 16.87 G. Medina 15.17")
+        const heatRegex = /([A-ZÀ-ÿ]\.\s+[A-Za-zÀ-ÿ'-]+)\s+([\d]{1,2}\.[\d]{2})\s+([A-ZÀ-ÿ]\.\s+[A-Za-zÀ-ÿ'-]+)\s+([\d]{1,2}\.[\d]{2})/g;
+        let match;
 
-        for (let i = 0; i < lines.length - 3; i++) {
-          const p1 = lines[i];
-          const s1 = lines[i+1];
-          const p2 = lines[i+2];
-          const s2 = lines[i+3];
+        while ((match = heatRegex.exec(cleanContent)) !== null) {
+          const p1 = match[1].trim();
+          const score1 = parseFloat(match[2]);
+          const p2 = match[3].trim();
+          const score2 = parseFloat(match[4]);
 
-          const isScore1 = /^[\d]{1,2}\.[\d]{2}$/.test(s1);
-          const isScore2 = /^[\d]{1,2}\.[\d]{2}$/.test(s2);
+          let winner = null;
+          if (score1 > score2) winner = p1;
+          else if (score2 > score1) winner = p2;
 
-          if (isScore1 && isScore2 && isSurferName(p1) && isSurferName(p2)) {
-            const score1 = parseFloat(s1);
-            const score2 = parseFloat(s2);
-            let winner = null;
-            if (score1 > score2) winner = p1;
-            else if (score2 > score1) winner = p2;
-
-            heatsFound.push({ p1, p2, score1, score2, winner });
-          }
+          heatsFound.push({ p1, p2, score1, score2, winner });
         }
 
         const unicos = [];
@@ -117,7 +105,7 @@ export default {
         if (unicos.length === 0) {
           return new Response(JSON.stringify({
             sucesso: false,
-            mensagem: "Página carregada via Anakin, mas a estrutura das notas não foi reconhecida."
+            mensagem: "Página carregada via Anakin, mas o padrão das baterias não foi identificado."
           }), { headers: corsHeaders });
         }
 
