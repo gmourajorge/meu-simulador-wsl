@@ -351,56 +351,63 @@
         }
 
         function aplicarBateriasSincronizadas(baterias) {
-            const catHeats = currentEvent.heats[currentCategory];
-            
-            const getLastName = (name) => {
-                if (!name) return '';
-                const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-                const parts = clean.split(/\s+/);
-                return parts[parts.length - 1];
-            };
+			const catHeats = currentEvent.heats[currentCategory];
+			
+			const getLastName = (name) => {
+				if (!name) return '';
+				const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+				const parts = clean.split(/\s+/);
+				return parts[parts.length - 1];
+			};
 
-            let atualizadas = 0;
+			let atualizadas = 0;
 
-            baterias.forEach(ext => {
-                if (!ext.p1 || !ext.p2) return;
-                let atualizouExistente = false;
+			baterias.forEach(ext => {
+				if (!ext.p1 || !ext.p2) return;
+				let atualizou = false;
 
-                const extLastName1 = getLastName(ext.p1);
-                const extLastName2 = getLastName(ext.p2);
-                const extWinnerLastName = getLastName(ext.winner);
+				const extLast1 = getLastName(ext.p1);
+				const extLast2 = getLastName(ext.p2);
+				const extWinnerLast = getLastName(ext.winner);
 
-                for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
-                    if (!catHeats[r]) continue;
-                    for (let i = 0; i < catHeats[r].length; i++) {
-                        let sysHeat = catHeats[r][i];
-                        if (sysHeat.p1 === 'Aguardando...' && sysHeat.p2 === 'Aguardando...') continue;
+				for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
+					if (!catHeats[r]) continue;
 
-                        const sysLastName1 = getLastName(sysHeat.p1);
-                        const sysLastName2 = getLastName(sysHeat.p2);
+					for (let i = 0; i < catHeats[r].length; i++) {
+						let sysHeat = catHeats[r][i];
 
-                        const matchDirect = (sysLastName1 === extLastName1 && sysLastName2 === extLastName2);
-                        const matchReverse = (sysLastName1 === extLastName2 && sysLastName2 === extLastName1);
+						const sysLast1 = getLastName(sysHeat.p1);
+						const sysLast2 = getLastName(sysHeat.p2);
 
-                        if (matchDirect || matchReverse) {
-                            if (extWinnerLastName) {
-                                if (sysLastName1 === extWinnerLastName) sysHeat.winner = sysHeat.p1;
-                                else if (sysLastName2 === extWinnerLastName) sysHeat.winner = sysHeat.p2;
-                            }
-                            atualizouExistente = true;
-                            atualizadas++;
-                            break;
-                        }
-                    }
-                    if (atualizouExistente) break;
-                }
-            });
+						// Verifica se pelo menos um atleta coincide ou se a vaga estava em "Aguardando..."
+						const matchP1 = sysLast1 && (sysLast1 === extLast1 || sysLast1 === extLast2);
+						const matchP2 = sysLast2 && (sysLast2 === extLast1 || sysLast2 === extLast2);
+						const isWaiting = sysHeat.p1 === 'Aguardando...' || sysHeat.p2 === 'Aguardando...';
 
-            currentEvent.defined = true;
-            recalculateCascades();
-            renderBracket();
-            showToast(`✅ ${atualizadas} baterias atualizadas com sucesso!`);
-        }
+						if (matchP1 || matchP2 || isWaiting) {
+							// Atualiza os nomes no simulador com os atletas reais da WSL (substitutos/wildcards)
+							sysHeat.p1 = ext.p1;
+							sysHeat.p2 = ext.p2;
+
+							if (extWinnerLast) {
+								if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+								else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+							}
+
+							atualizou = true;
+							atualizadas++;
+							break;
+						}
+					}
+					if (atualizou) break;
+				}
+			});
+
+			currentEvent.defined = true;
+			recalculateCascades();
+			renderBracket();
+			showToast(`✅ ${atualizadas} baterias atualizadas (com atletas/substitutos reais)!`);
+		}
 
         function processarHTMLManual() {
             const html = document.getElementById('wsl-source').value;
