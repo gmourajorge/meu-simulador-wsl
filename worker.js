@@ -25,29 +25,54 @@ export default {
           "Content-Type": "application/json"
         };
 
-        const syncRes = await fetch("https://api.anakin.io/v1/scrape", {
+        // 1. Criar a tarefa no endpoint oficial do Anakin
+        const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
           method: "POST",
           headers,
           body: JSON.stringify({
             url: targetURL,
+            country: "us",
             useBrowser: true,
             formats: ["markdown", "html"]
           })
         });
 
-        if (!syncRes.ok) {
-          throw new Error(`Erro no servidor Anakin: Status ${syncRes.status}`);
+        if (!submitRes.ok) {
+          throw new Error(`Erro no servidor Anakin: Status ${submitRes.status}`);
         }
 
-        const syncData = await syncRes.json();
-        const content = syncData.markdown || syncData.html || "";
+        const jobData = await submitRes.json();
+        const jobId = jobData.jobId || jobData.id;
+
+        if (!jobId) {
+          throw new Error("Não foi possível obter o ID da tarefa no Anakin.");
+        }
+
+        // 2. Polling: Aguarda a conclusão da raspagem (até 20 segundos)
+        let content = "";
+        let attempts = 0;
+        while (attempts < 20) {
+          await new Promise(r => setTimeout(r, 1000));
+          attempts++;
+
+          const pollRes = await fetch(`https://api.anakin.io/v1/url-scraper/${jobId}`, { headers });
+          if (pollRes.ok) {
+            const result = await pollRes.json();
+            if (result.status === "completed") {
+              content = result.markdown || result.html || (result.data ? result.data.markdown || result.data.html : "");
+              break;
+            } else if (result.status === "failed") {
+              throw new Error("A raspagem falhou no servidor do Anakin.");
+            }
+          }
+        }
 
         if (!content) {
-          throw new Error("Página retornou vazia do Anakin.");
+          throw new Error("Tempo limite excedido para obter o resultado da página.");
         }
 
+        // 3. Extrator por Regex (Casando notas e atletas)
         const heatsFound = [];
-
         const heatRegex = /([A-Z]\.\s+[A-Za-z'-]+)\s+([\d.]+)\s+([A-Z]\.\s+[A-Za-z'-]+)\s+([\d.]+)/g;
         let match;
 
@@ -74,7 +99,7 @@ export default {
         if (unicos.length === 0) {
           return new Response(JSON.stringify({
             sucesso: false,
-            mensagem: "Página carregada, mas o padrão das baterias não foi identificado no texto."
+            mensagem: "Página carregada via Anakin, mas o padrão das baterias não foi identificado no texto."
           }), { headers: corsHeaders });
         }
 
