@@ -285,8 +285,30 @@
         let currentCategory = 'masculino';
         let globalLinksToDraw = [];
 
+        function salvarPalpitesLocal() {
+            if (!currentEvent) return;
+            const cacheKey = `wsl_picks_2026_${currentEvent.id}`;
+            localStorage.setItem(cacheKey, JSON.stringify(currentEvent.heats));
+        }
+
+        function carregarPalpitesLocais() {
+            if (!currentEvent) return;
+            const cacheKey = `wsl_picks_2026_${currentEvent.id}`;
+            const savedData = localStorage.getItem(cacheKey);
+            if (savedData) {
+                try {
+                    currentEvent.heats = JSON.parse(savedData);
+                    currentEvent.defined = true;
+                } catch (e) {
+                    console.error("Erro ao ler cache local:", e);
+                }
+            }
+        }
+
         function initApp() {
             populateSelect();
+            carregarPalpitesLocais();
+            recalculateCascades();
             renderBanner();
             renderBracket();
             window.addEventListener('resize', () => requestAnimationFrame(drawSVGLines));
@@ -300,6 +322,8 @@
             s.addEventListener('change', e => { 
                 currentEvent = wslEvents.find(ev => ev.id === e.target.value); 
                 document.getElementById('wsl-link').href = currentEvent.wslUrl;
+                carregarPalpitesLocais();
+                recalculateCascades();
                 renderBanner(); 
                 renderBracket(); 
             });
@@ -351,85 +375,82 @@
         }
 
         function aplicarBateriasSincronizadas(baterias) {
-			const catHeats = currentEvent.heats[currentCategory];
-			
-			const getLastName = (name) => {
-				if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
-				const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-				const parts = clean.split(/\s+/);
-				return parts[parts.length - 1];
-			};
+            const catHeats = currentEvent.heats[currentCategory];
+            
+            const getLastName = (name) => {
+                if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
+                const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                const parts = clean.split(/\s+/);
+                return parts[parts.length - 1];
+            };
 
-			let totalAtualizadas = 0;
-			let houveMudancaNestaRodada = true;
-			let pass = 0;
+            let totalAtualizadas = 0;
+            let houveMudancaNestaRodada = true;
+            let pass = 0;
 
-			// Loop de Cascata: Roda até 6 vezes propagando vencedores para abrir as vagas seguintes
-			while (houveMudancaNestaRodada && pass < 6) {
-				houveMudancaNestaRodada = false;
-				pass++;
+            while (houveMudancaNestaRodada && pass < 6) {
+                houveMudancaNestaRodada = false;
+                pass++;
 
-				baterias.forEach(ext => {
-					if (!ext.p1 || !ext.p2) return;
+                baterias.forEach(ext => {
+                    if (!ext.p1 || !ext.p2) return;
 
-					const extLast1 = getLastName(ext.p1);
-					const extLast2 = getLastName(ext.p2);
-					const extWinnerLast = getLastName(ext.winner);
+                    const extLast1 = getLastName(ext.p1);
+                    const extLast2 = getLastName(ext.p2);
+                    const extWinnerLast = getLastName(ext.winner);
 
-					if (!extLast1 || !extLast2) return;
+                    if (!extLast1 || !extLast2) return;
 
-					for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
-						if (!catHeats[r]) continue;
+                    for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
+                        if (!catHeats[r]) continue;
 
-						for (let i = 0; i < catHeats[r].length; i++) {
-							let sysHeat = catHeats[r][i];
+                        for (let i = 0; i < catHeats[r].length; i++) {
+                            let sysHeat = catHeats[r][i];
 
-							const sysLast1 = getLastName(sysHeat.p1);
-							const sysLast2 = getLastName(sysHeat.p2);
+                            const sysLast1 = getLastName(sysHeat.p1);
+                            const sysLast2 = getLastName(sysHeat.p2);
 
-							const matchDirect = (sysLast1 && sysLast1 === extLast1) && (sysLast2 && sysLast2 === extLast2);
-							const matchReverse = (sysLast1 && sysLast1 === extLast2) && (sysLast2 && sysLast2 === extLast1);
+                            const matchDirect = (sysLast1 && sysLast1 === extLast1) && (sysLast2 && sysLast2 === extLast2);
+                            const matchReverse = (sysLast1 && sysLast1 === extLast2) && (sysLast2 && sysLast2 === extLast1);
 
-							// Casamento perfeito de ambos os atletas na bateria
-							if (matchDirect || matchReverse) {
-								if (extWinnerLast && !sysHeat.winner) {
-									if (sysLast1 === extWinnerLast) sysHeat.winner = sysHeat.p1;
-									else if (sysLast2 === extWinnerLast) sysHeat.winner = sysHeat.p2;
-									
-									houveMudancaNestaRodada = true;
-									totalAtualizadas++;
-								}
-								break;
-							}
+                            if (matchDirect || matchReverse) {
+                                if (extWinnerLast && !sysHeat.winner) {
+                                    if (sysLast1 === extWinnerLast) sysHeat.winner = sysHeat.p1;
+                                    else if (sysLast2 === extWinnerLast) sysHeat.winner = sysHeat.p2;
+                                    
+                                    houveMudancaNestaRodada = true;
+                                    totalAtualizadas++;
+                                }
+                                break;
+                            }
 
-							// Preenchimento de vaga pendente (Aguardando...)
-							if ((sysLast1 && !sysLast2 && (sysLast1 === extLast1 || sysLast1 === extLast2)) ||
-								(sysLast2 && !sysLast1 && (sysLast2 === extLast1 || sysLast2 === extLast2))) {
-								
-								if (!sysLast1) sysHeat.p1 = (sysLast2 === extLast1) ? ext.p2 : ext.p1;
-								if (!sysLast2) sysHeat.p2 = (sysLast1 === extLast1) ? ext.p2 : ext.p1;
+                            if ((sysLast1 && !sysLast2 && (sysLast1 === extLast1 || sysLast1 === extLast2)) ||
+                                (sysLast2 && !sysLast1 && (sysLast2 === extLast1 || sysLast2 === extLast2))) {
+                                
+                                if (!sysLast1) sysHeat.p1 = (sysLast2 === extLast1) ? ext.p2 : ext.p1;
+                                if (!sysLast2) sysHeat.p2 = (sysLast1 === extLast1) ? ext.p2 : ext.p1;
 
-								if (extWinnerLast) {
-									if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
-									else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
-								}
+                                if (extWinnerLast) {
+                                    if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+                                    else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+                                }
 
-								houveMudancaNestaRodada = true;
-								totalAtualizadas++;
-								break;
-							}
-						}
-					}
-				});
+                                houveMudancaNestaRodada = true;
+                                totalAtualizadas++;
+                                break;
+                            }
+                        }
+                    }
+                });
 
-				// Atualiza a árvore e recalcula os vencedores promovidos para a próxima fase
-				recalculateCascades();
-			}
+                recalculateCascades();
+            }
 
-			currentEvent.defined = true;
-			renderBracket();
-			showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
-		}
+            currentEvent.defined = true;
+            salvarPalpitesLocal();
+            renderBracket();
+            showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
+        }
 
         function processarHTMLManual() {
             const html = document.getElementById('wsl-source').value;
@@ -514,8 +535,20 @@
 
         function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }
         
-        function resetSingleHeat(round, idx) { currentEvent.heats[currentCategory][round][idx].winner = null; recalculateCascades(); renderBracket(); }
-        function resetBracket() { Object.values(currentEvent.heats[currentCategory]).forEach(r => Array.isArray(r) && r.forEach(h => h.winner = null)); currentEvent.heats[currentCategory].champion = null; recalculateCascades(); }
+        function resetSingleHeat(round, idx) { 
+            currentEvent.heats[currentCategory][round][idx].winner = null; 
+            recalculateCascades(); 
+            salvarPalpitesLocal();
+            renderBracket(); 
+        }
+        
+        function resetBracket() { 
+            Object.values(currentEvent.heats[currentCategory]).forEach(r => Array.isArray(r) && r.forEach(h => h.winner = null)); 
+            currentEvent.heats[currentCategory].champion = null; 
+            recalculateCascades(); 
+            salvarPalpitesLocal();
+            renderBracket();
+        }
         
         function setWinner(round, heatIdx, slot) {
             const hd = currentEvent.heats[currentCategory][round][heatIdx];
@@ -523,6 +556,7 @@
             if(!name || name.includes('Vencedor') || name === 'Aguardando...') return;
             hd.winner = name;
             recalculateCascades();
+            salvarPalpitesLocal();
             renderBracket();
         }
 
