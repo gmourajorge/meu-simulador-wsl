@@ -20,86 +20,122 @@ export default {
       }
 
       try {
-        // Requisição para a API do Anakin.io em vez do CodeTabs
-        const anakinRes = await fetch("https://api.anakin.io/v1/scrape", {
+        const headers = {
+          "X-API-Key": env.ANAKIN_API_KEY,
+          "Content-Type": "application/json"
+        };
+
+        let html = "";
+
+        // 1. Tenta requisição síncrona rápida em /v1/scrape
+        const syncRes = await fetch("https://api.anakin.io/v1/scrape", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${env.ANAKIN_API_KEY}`
-          },
+          headers,
           body: JSON.stringify({
             url: targetURL,
-            generateJson: true,
-            prompt: "Extraia a lista de baterias de surf contendo: p1 (nome do atleta 1), p2 (nome do atleta 2) e winner (vencedor)."
+            formats: ["html", "cleanedHtml"]
           })
         });
 
-        if (!anakinRes.ok) {
-          throw new Error(`Erro no servidor Anakin: Status ${anakinRes.status}`);
-        }
-
-        const data = await anakinRes.json();
-        let unicos = [];
-
-        // 1. Tenta pegar os dados ja estruturados pela IA do Anakin
-        if (data.generatedJson && Array.isArray(data.generatedJson.baterias)) {
-          unicos = data.generatedJson.baterias;
+        if (syncRes.ok) {
+          const syncData = await syncRes.json();
+          html = syncData.cleanedHtml || syncData.html || "";
         } else {
-          // 2. Fallback: Se a IA não estruturar, roda seu parser nativo no HTML sem bloqueio retornado pelo Anakin
-          const html = data.html || data.cleanedHtml || "";
-          if (html.includes('Just a moment...') || html.includes('Attention Required!')) {
-            throw new Error("O Firewall da WSL ainda bloqueou a requisição.");
+          // 2. Fallback: cria a tarefa via /v1/url-scraper conforme o Playground
+          const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              url: targetURL,
+              country: "us",
+              formats: ["html", "cleanedHtml"]
+            })
+          });
+
+          if (!submitRes.ok) {
+            throw new Error(`Erro no servidor Anakin: Status ${submitRes.status}`);
           }
 
-          const clean = html.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-          const heatsFound = [];
+          const jobData = await submitRes.json();
+          const jobId = jobData.jobId || jobData.id;
 
-          function traverse(obj) {
-            if (!obj || typeof obj !== 'object') return;
-            if (Array.isArray(obj)) return obj.forEach(traverse);
+          if (!jobId) {
+            throw new Error("Não foi possível obter o ID da tarefa no Anakin.");
+          }
 
-            const athletes = obj.athletes || obj.participants || obj.surfers;
-            if (Array.isArray(athletes) && athletes.length >= 2) {
-              const p1 = athletes[0]?.name || `${athletes[0]?.firstName || ''} ${athletes[0]?.lastName || ''}`.trim();
-              const p2 = athletes[1]?.name || `${athletes[1]?.firstName || ''} ${athletes[1]?.lastName || ''}`.trim();
+          // Polling: Aguarda a conclusão da raspagem (até 15s)
+          let attempts = 0;
+          while (attempts < 15) {
+            await new Promise(r => setTimeout(r, 1000));
+            attempts++;
 
-              if (p1 && p2 && p1 !== p2 && !p1.toLowerCase().includes('tbd')) {
-                let winner = null;
-                const wId = obj.winnerAthleteId || obj.winnerId || obj.winner;
-                if (wId === athletes[0]?.id || wId === p1) winner = p1;
-                else if (wId === athletes[1]?.id || wId === p2) winner = p2;
-                heatsFound.push({ p1, p2, winner: winner || null });
+            const pollRes = await fetch(`https://api.anakin.io/v1/url-scraper/${jobId}`, { headers });
+            if (pollRes.ok) {
+              const result = await pollRes.json();
+              if (result.status === "completed") {
+                html = result.cleanedHtml || result.html || (result.data ? result.data.cleanedHtml || result.data.html : "");
+                break;
+              } else if (result.status === "failed") {
+                throw new Error("A raspagem falhou no servidor do Anakin.");
               }
             }
-            Object.values(obj).forEach(val => typeof val === 'object' && val !== null && traverse(val));
           }
+        }
 
-          const match = clean.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
-          if (match) {
-            try { traverse(JSON.parse(match[1])); } catch(e) {}
-          }
+        if (!html) {
+          throw new Error("Não foi possível obter o HTML da página após a raspagem.");
+        }
 
-          if (heatsFound.length === 0) {
-            const jsonBlocks = clean.match(/\{"props":[\s\S]*?\}\}\}/g) || clean.match(/\{"pageProps":[\s\S]*?\}\}/g) || [];
-            for (const block of jsonBlocks) {
-              try {
-                traverse(JSON.parse(block));
-                if (heatsFound.length > 0) break;
-              } catch(e) {}
+        // --- Extração de Baterias do HTML ---
+        const clean = html.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        const heatsFound = [];
+
+        function traverse(obj) {
+          if (!obj || typeof obj !== 'object') return;
+          if (Array.isArray(obj)) return obj.forEach(traverse);
+
+          const athletes = obj.athletes || obj.participants || obj.surfers;
+          if (Array.isArray(athletes) && athletes.length >= 2) {
+            const p1 = athletes[0]?.name || `${athletes[0]?.firstName || ''} ${athletes[0]?.lastName || ''}`.trim();
+            const p2 = athletes[1]?.name || `${athletes[1]?.firstName || ''} ${athletes[1]?.lastName || ''}`.trim();
+
+            if (p1 && p2 && p1 !== p2 && !p1.toLowerCase().includes('tbd')) {
+              let winner = null;
+              const wId = obj.winnerAthleteId || obj.winnerId || obj.winner;
+              if (wId === athletes[0]?.id || wId === p1) winner = p1;
+              else if (wId === athletes[1]?.id || wId === p2) winner = p2;
+              heatsFound.push({ p1, p2, winner: winner || null });
             }
           }
-
-          const keys = new Set();
-          heatsFound.forEach(h => {
-            const k = `${h.p1}-${h.p2}`;
-            if (!keys.has(k)) { keys.add(k); unicos.push(h); }
-          });
+          Object.values(obj).forEach(val => typeof val === 'object' && val !== null && traverse(val));
         }
+
+        const match = clean.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+        if (match) {
+          try { traverse(JSON.parse(match[1])); } catch(e) {}
+        }
+
+        if (heatsFound.length === 0) {
+          const jsonBlocks = clean.match(/\{"props":[\s\S]*?\}\}\}/g) || clean.match(/\{"pageProps":[\s\S]*?\}\}/g) || [];
+          for (const block of jsonBlocks) {
+            try {
+              traverse(JSON.parse(block));
+              if (heatsFound.length > 0) break;
+            } catch(e) {}
+          }
+        }
+
+        const unicos = [];
+        const keys = new Set();
+        heatsFound.forEach(h => {
+          const k = `${h.p1}-${h.p2}`;
+          if (!keys.has(k)) { keys.add(k); unicos.push(h); }
+        });
 
         if (unicos.length === 0) {
           return new Response(JSON.stringify({
             sucesso: false,
-            mensagem: "Página carregada via Anakin, mas os dados das baterias não foram identificados."
+            mensagem: "Página carregada via Anakin, mas os dados das baterias não foram encontrados no HTML."
           }), { headers: corsHeaders });
         }
 
