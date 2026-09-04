@@ -255,6 +255,20 @@ export default {
       }
     }
 
-    return env.ASSETS.fetch(request);
-  }
-};
+    return new Response(JSON.stringify({
+          sucesso: false,
+          mensagem: "Falha na extração de baterias: " + err.message
+        }), { headers: corsHeaders });
+      }
+    } // <-- Fim do bloco if (url.pathname === '/api-wsl')
+
+    // =========================================================================
+    // FALLBACK PARA QUALQUER OUTRA ROTA (Ex: /favicon.ico)
+    // =========================================================================
+    return new Response(JSON.stringify({ 
+      sucesso: false, 
+      mensagem: "Rota não encontrada." 
+    }), { status: 404, headers: corsHeaders });
+    
+  } // <-- Fim do async fetch(request, env, ctx)
+}; // <-- Fim do export default
