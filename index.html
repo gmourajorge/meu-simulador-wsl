@@ -45,7 +45,6 @@
 
         .btn-sync-wsl { background: rgba(2, 132, 199, 0.08); color: var(--wsl-accent); border: 1px solid rgba(2, 132, 199, 0.3); padding: 5px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
         .btn-sync-wsl:hover { background: var(--wsl-accent); color: #fff; }
-        .btn-sync-wsl.disabled { opacity: 0.7; cursor: not-allowed; }
         .btn-reset-all { background: rgba(239, 68, 68, 0.08); color: var(--wsl-red); border: 1px solid rgba(239, 68, 68, 0.3); padding: 5px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-transform: uppercase; }
         .btn-reset-all:hover { background: var(--wsl-red); color: #fff; }
 
@@ -140,7 +139,6 @@
             </div>
         </div>
         <div class="actions-group">
-            <!-- Texto isolado em span para atualização de progresso do Background Sync -->
             <button type="button" class="btn-sync-wsl" id="btnSyncWSL">
                 <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25"/><path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-linecap="round"/></svg>
                 <span id="btnSyncText">Sincronizar WSL</span>
@@ -153,9 +151,7 @@
 
     <section class="manual-sync-box" id="manualSyncBox">
         <h4>Sincronização Manual (Fallback)</h4>
-        <p>1. <a href="#" id="wsl-link" target="_blank" style="color: var(--wsl-accent); font-weight: bold;">Clique aqui para abrir a página da WSL</a> e aperte <b>Ctrl+U</b>.<br>
-           2. Aperte <b>Ctrl+A</b> para selecionar tudo e <b>Ctrl+C</b> para copiar.<br>
-           3. Cole o código abaixo e clique em Extrair.</p>
+        <p>Cole o código HTML da página da WSL abaixo e clique em Extrair.</p>
         <textarea id="wsl-source" rows="4" placeholder="Cole o código-fonte HTML aqui..."></textarea>
         <div>
             <button class="btn-extract" onclick="processarHTMLManual()">Extrair Baterias</button>
@@ -246,7 +242,7 @@
         }
 
         // ==========================================
-        // FLUXO DE INICIALIZAÇÃO E BACKGROUND SYNC
+        // FLUXO DE INICIALIZAÇÃO
         // ==========================================
         async function initApp() {
             const carregou = await cargarCalendarioDinamico();
@@ -260,8 +256,7 @@
             carregarInterfaceEtapa();
             window.addEventListener('resize', () => requestAnimationFrame(drawSVGLines));
 
-            // Dispara o download de todas as outras etapas finalizadas silenciosamente
-            startBackgroundSync();
+            startBackgroundSync(); // Inicia sync de todas as etapas em 2º plano
         }
 
         async function carregarInterfaceEtapa() {
@@ -271,12 +266,11 @@
             renderBracket();
 
             if (!possuiPalpites) {
-                // Checa se o background sync já baixou o backup nativo da WSL (Melhor Prática)
                 const backupData = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
                 if (backupData) {
-                    aplicarBateriasSincronizadas(JSON.parse(backupData), false); // Aplica o backup e renderiza
+                    aplicarBateriasSincronizadas(JSON.parse(backupData), false);
                 } else {
-                    await sincronizarWSLAuto(true); // Faz o fetch bloqueante para a etapa atual
+                    await sincronizarWSLAuto(true);
                 }
             }
         }
@@ -296,17 +290,14 @@
             
             s.addEventListener('change', async e => { 
                 currentEvent = wslEvents.find(ev => ev.id === e.target.value); 
-                document.getElementById('wsl-link').href = currentEvent.wslUrl;
                 carregarInterfaceEtapa();
             });
-            document.getElementById('wsl-link').href = currentEvent.wslUrl;
 
             document.getElementById('btnMasc').addEventListener('click', () => switchCategory('masculino'));
             document.getElementById('btnFem').addEventListener('click', () => switchCategory('feminino'));
             
-            // RESET INTELIGENTE
             document.getElementById('btnResetAll').addEventListener('click', () => { 
-                if(confirm("Deseja apagar os resultados e voltar a simular do Round 1?")) resetBracketInteligente(); 
+                if(confirm("Deseja apagar os resultados e voltar a simular a partir dos Rounds iniciais?")) resetBracketInteligente(); 
             });
             
             document.getElementById('bracketContainer').addEventListener('click', e => {
@@ -322,14 +313,15 @@
         }
 
         // ==========================================
-        // 1. BACKGROUND SYNC COMPLETO (Melhor Prática)
+        // 1. BACKGROUND SYNC (Com Fallback Seguro UI)
         // ==========================================
         async function startBackgroundSync() {
             const syncIcon = document.querySelector('.sync-icon');
-            const btnText = document.getElementById('btnSyncText');
+            // Busca o span; se não achar, usa o botão inteiro para não dar erro
+            const btnText = document.getElementById('btnSyncText') || document.getElementById('btnSyncWSL'); 
+            const originalText = btnText.textContent;
             let toSync = [];
             
-            // Verifica o que falta sincronizar (ignorando eventos falhos/futuros marcados)
             for (let ev of wslEvents) {
                 ['masculino', 'feminino'].forEach(cat => {
                     if (!localStorage.getItem(`wsl_api_backup_${cat}_${ev.id}`) && !localStorage.getItem(`wsl_api_failed_${cat}_${ev.id}`)) {
@@ -339,34 +331,31 @@
             }
             if (toSync.length === 0) return;
 
-            syncIcon.classList.add('spinning');
+            if(syncIcon) syncIcon.classList.add('spinning');
             
             let count = 0;
             for (let task of toSync) {
                 count++;
-                btnText.textContent = `Baixando Temporada... ${Math.round((count/toSync.length)*100)}%`;
+                if(btnText) btnText.textContent = `Progresso... ${Math.round((count/toSync.length)*100)}%`;
                 
                 try {
                     let res = await fetch(`/api-wsl?url=${encodeURIComponent(task.ev.wslUrl)}&cat=${task.cat}`);
                     let data = await res.json();
                     if (data.sucesso && data.baterias && data.baterias.length > 0) {
-                        // Salva o backup nativo permanentemente
                         localStorage.setItem(`wsl_api_backup_${task.cat}_${task.ev.id}`, JSON.stringify(data.baterias));
                         
-                        // Atualiza a tela se o usuário estiver parado nela vazia
-                        if (currentEvent.id === task.ev.id && currentCategory === task.cat) {
+                        if (currentEvent && currentEvent.id === task.ev.id && currentCategory === task.cat) {
                             const isEmpty = Object.values(currentEvent.heats[task.cat]).every(r => Array.isArray(r) && r.every(h => h.p1 === 'Aguardando...'));
                             if (isEmpty) aplicarBateriasSincronizadas(data.baterias, false);
                         }
                     } else {
-                        // Marca como falha ou evento futuro para não spammar requisições a cada reload
                         localStorage.setItem(`wsl_api_failed_${task.cat}_${task.ev.id}`, 'true');
                     }
                 } catch(e) {}
             }
 
-            syncIcon.classList.remove('spinning');
-            btnText.textContent = "Sincronizar WSL";
+            if(syncIcon) syncIcon.classList.remove('spinning');
+            if(btnText) btnText.textContent = originalText;
             showToast("✅ Todas as etapas concluídas foram baixadas!");
         }
 
@@ -383,7 +372,7 @@
                     }
                     return;
                 }
-                aplicarBateriasSincronizadas(data.baterias, true); // True salva no backup principal
+                aplicarBateriasSincronizadas(data.baterias, true);
             } catch (err) {
                 if (showUI) {
                     showToast("⚠️ Falha na conexão automática. Abrindo modo manual...");
@@ -395,19 +384,17 @@
         }
 
         // ==========================================
-        // 2. RESET INTELIGENTE (Mantém Round 1 e 2)
+        // 2. RESET INTELIGENTE
         // ==========================================
         function resetBracketInteligente() {
             const catHeats = currentEvent.heats[currentCategory];
             const backupStr = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
 
-            // Zera Tudo
             Object.values(catHeats).forEach(r => Array.isArray(r) && r.forEach(h => {
                 h.p1 = 'Aguardando...'; h.p2 = 'Aguardando...'; h.winner = null;
             }));
             catHeats.champion = null;
 
-            // Restaura APENAS os Atletas Originais (Sem Vencedores) das rodadas preliminares
             if (backupStr) {
                 const baterias = JSON.parse(backupStr);
                 
@@ -419,17 +406,18 @@
                     r2Indices.forEach((extIdx, sysIdx) => {
                         catHeats.r2[sysIdx].p1 = baterias[extIdx].p1; catHeats.r2[sysIdx].p2 = baterias[extIdx].p2;
                     });
+                } else if (currentCategory === 'feminino' && baterias.length === 23) {
+                    for(let i=0; i<6; i++) { catHeats.r1[i].p1 = baterias[i].p1; catHeats.r1[i].p2 = baterias[i].p2; }
+                    catHeats.r1[6].p1 = baterias[21].p1; catHeats.r1[6].p2 = baterias[21].p2;
+                    catHeats.r1[7].p1 = baterias[22].p1; catHeats.r1[7].p2 = baterias[22].p2;
                 } else {
-                    const r1Limit = Math.min(baterias.length, catHeats.r1.length);
-                    for(let i = 0; i < r1Limit; i++){
-                        catHeats.r1[i].p1 = baterias[i].p1; catHeats.r1[i].p2 = baterias[i].p2;
-                    }
-                    const r2Limit = Math.min(baterias.length - catHeats.r1.length, catHeats.r2.length);
-                    for(let i = 0; i < r2Limit; i++){
-                        if(baterias[catHeats.r1.length + i]) {
-                            catHeats.r2[i].p1 = baterias[catHeats.r1.length + i].p1;
-                            catHeats.r2[i].p2 = baterias[catHeats.r1.length + i].p2;
-                        }
+                    const flatSysHeats = [];
+                    const roundKeys = ['r1', 'r2', 'qf', 'sf', 'final'];
+                    roundKeys.forEach(rk => { if (catHeats[rk]) catHeats[rk].forEach(h => flatSysHeats.push(h)); });
+
+                    const totalToFill = Math.min(baterias.length, flatSysHeats.length);
+                    for (let idx = 0; idx < totalToFill; idx++) {
+                        if(flatSysHeats[idx]) { flatSysHeats[idx].p1 = baterias[idx].p1; flatSysHeats[idx].p2 = baterias[idx].p2; }
                     }
                 }
             }
@@ -441,12 +429,11 @@
         }
 
         // ==========================================
-        // LÓGICA CORE DE ALOCAÇÃO
+        // LÓGICA CORE BLINDADA (Corrige o Erro Feminino)
         // ==========================================
         function aplicarBateriasSincronizadas(baterias, saveBackup = true) {
             if (!baterias || baterias.length === 0) return;
 
-            // Grava na base imutável para uso no Reset Inteligente
             if (saveBackup) {
                 localStorage.setItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`, JSON.stringify(baterias));
             }
@@ -475,6 +462,10 @@
 
             let totalAtualizadas = 0;
 
+            const flatSysHeats = [];
+            const roundKeys = ['r1', 'r2', 'r3', 'qf', 'sf', 'final'];
+            roundKeys.forEach(rk => { if (catHeats[rk]) catHeats[rk].forEach(h => flatSysHeats.push(h)); });
+
             if (currentCategory === 'masculino' && baterias.length === 35 && catHeats.r1 && catHeats.r2 && catHeats.r3) {
                 for (let i = 0; i < 4; i++) assignHeat(catHeats.r1[i], baterias[i]);
                 if (catHeats.final) assignHeat(catHeats.final[0], baterias[4]);
@@ -491,13 +482,20 @@
                 const sfIndices = [19, 34];
                 sfIndices.forEach((extIdx, sysIdx) => { if (catHeats.sf[sysIdx]) assignHeat(catHeats.sf[sysIdx], baterias[extIdx]); });
                 totalAtualizadas = 35;
-            } else {
-                const rounds = currentCategory === 'masculino' ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
-                const flatSysHeats = [];
-                rounds.forEach(r => {
-                    if (catHeats[r] && Array.isArray(catHeats[r])) catHeats[r].forEach(h => flatSysHeats.push(h));
-                });
+            } 
+            else if (currentCategory === 'feminino' && baterias.length === 23 && catHeats.r1 && catHeats.r2) {
+                for(let i=0; i<6; i++) assignHeat(catHeats.r1[i], baterias[i]);
+                assignHeat(catHeats.r1[6], baterias[21]);
+                assignHeat(catHeats.r1[7], baterias[22]);
 
+                for(let i=0; i<8; i++) assignHeat(catHeats.r2[i], baterias[13+i]);
+                for(let i=0; i<4; i++) assignHeat(catHeats.qf[i], baterias[9+i]);
+                for(let i=0; i<2; i++) assignHeat(catHeats.sf[i], baterias[7+i]);
+                
+                assignHeat(catHeats.final[0], baterias[6]);
+                totalAtualizadas = 23;
+            }
+            else {
                 const totalToFill = Math.min(baterias.length, flatSysHeats.length);
                 for (let idx = 0; idx < totalToFill; idx++) {
                     assignHeat(flatSysHeats[idx], baterias[idx]);
@@ -674,7 +672,6 @@
             svg.innerHTML = pathsHTML;
         }
 
-        // Retorno do scrap manual
         function processarHTMLManual() {
             const html = document.getElementById('wsl-source').value;
             if (!html || html.length < 100) { showToast("⚠️ Por favor, cole o código-fonte válido."); return; }
