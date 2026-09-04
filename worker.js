@@ -69,10 +69,8 @@ export default {
           throw new Error("Tempo limite excedido para obter a resposta.");
         }
 
-        // 1. Normalização profunda de caracteres e quebras
         const cleanContent = content
           .replace(/&nbsp;/g, ' ')
-          .replace(/[\u00A0\u1680\u180E\u2000-\u200B\u202F\u205F\u3000]/g, ' ')
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
           .replace(/<[^>]+>/g, '\n')
           .replace(/\r\n|\r/g, '\n');
@@ -82,34 +80,34 @@ export default {
           .map(l => l.trim())
           .filter(l => l.length > 0);
 
-        // 2. Funções de validação de elementos
-        const isScore = (s) => /^\d{1,2}\.\d{1,2}$/.test(s) && parseFloat(s) <= 20.0;
+        // Suporta notas inteiras ou decimais (ex: 12.7, 12.70, 4, 16.87)
+        const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) > 0;
+        
         const isBadName = (s) => {
           if (!s || s.length < 2 || s.length > 35 || /\d/.test(s)) return true;
-          const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro'];
+          const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro', 'event'];
           const l = s.toLowerCase();
           return bad.some(b => l.includes(b));
         };
 
-        // 3. Algoritmo de Varredura Relativa
         const heatsFound = [];
 
         for (let i = 0; i < lines.length; i++) {
           if (isScore(lines[i])) {
-            // Busca o Nome 1 voltando até 3 linhas
             let p1 = null;
-            for (let b = 1; b <= 3 && (i - b) >= 0; b++) {
+            // Busca o primeiro atleta até 4 linhas atrás
+            for (let b = 1; b <= 4 && (i - b) >= 0; b++) {
               if (!isBadName(lines[i - b])) {
                 p1 = lines[i - b];
                 break;
               }
             }
 
-            // Busca a segunda Nota em até 4 linhas à frente
-            for (let f = 1; f <= 4 && (i + f) < lines.length; f++) {
+            // Busca a segunda nota até 6 linhas à frente
+            for (let f = 1; f <= 6 && (i + f) < lines.length; f++) {
               if (isScore(lines[i + f])) {
-                // Busca o Nome 2 no intervalo entre as duas notas
                 let p2 = null;
+                // Busca o segundo atleta entre as duas notas
                 for (let k = i + 1; k < i + f; k++) {
                   if (!isBadName(lines[k])) {
                     p2 = lines[k];
@@ -125,7 +123,7 @@ export default {
                   else if (score2 > score1) winner = p2;
 
                   heatsFound.push({ p1, p2, score1, score2, winner });
-                  i = i + f; // Avança o ponteiro principal
+                  i = i + f;
                   break;
                 }
               }
@@ -133,21 +131,12 @@ export default {
           }
         }
 
-        // 4. Consolidação de baterias únicas
         const unicos = [];
         const keys = new Set();
         heatsFound.forEach(h => {
           const k = `${h.p1}-${h.p2}`;
           if (!keys.has(k)) { keys.add(k); unicos.push(h); }
         });
-
-        if (unicos.length === 0) {
-          return new Response(JSON.stringify({
-            sucesso: false,
-            mensagem: "Página carregada via Anakin, mas o padrão das baterias não foi identificado.",
-            debugLines: lines.slice(0, 50) // Retorna amostra bruta caso falhe
-          }), { headers: corsHeaders });
-        }
 
         return new Response(JSON.stringify({
           sucesso: true,
