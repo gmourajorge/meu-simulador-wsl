@@ -25,7 +25,6 @@ export default {
           "Content-Type": "application/json"
         };
 
-        // Função para executar a raspagem de uma URL individual via Anakin
         const scrapeSingleUrl = async (fetchUrl) => {
           try {
             const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
@@ -65,22 +64,35 @@ export default {
           }
         };
 
-        // Monta as URLs para raspar Round 1 e o Chaveamento Principal (Bracket)
-        const bracketURL = targetURL.includes('?') ? `${targetURL}&roundId=27069` : `${targetURL}?roundId=27069`;
-        
-        // Executa raspagem em paralelo para capturar todas as fases
-        const [contentRound1, contentBracket] = await Promise.all([
-          scrapeSingleUrl(targetURL),
-          scrapeSingleUrl(bracketURL)
-        ]);
+        // 1. Raspa a página principal do evento informado na requisição
+        const mainContent = await scrapeSingleUrl(targetURL);
 
-        const fullContent = (contentRound1 + "\n" + contentBracket).trim();
-
-        if (!fullContent) {
+        if (!mainContent) {
           throw new Error("Não foi possível obter os dados da WSL no Anakin.");
         }
 
-        // Limpeza de marcações
+        // 2. Extrai automaticamente todos os roundIds presentes no conteúdo raspado
+        const roundMatches = [...mainContent.matchAll(/roundId=(\d+)/g)];
+        const discoveredRoundIds = [...new Set(roundMatches.map(m => m[1]))];
+
+        let extraContents = [];
+        if (discoveredRoundIds.length > 0) {
+          const baseUrl = targetURL.split('?')[0];
+          
+          // Cria URLs secundárias apenas para roundIds que ainda não estão na URL original
+          const extraUrls = discoveredRoundIds
+            .map(rid => `${baseUrl}?roundId=${rid}`)
+            .filter(u => u !== targetURL);
+
+          // Limita a no máximo 3 requisições paralelas para evitar estouro de tempo limite
+          const urlsToFetch = extraUrls.slice(0, 3);
+          extraContents = await Promise.all(urlsToFetch.map(u => scrapeSingleUrl(u)));
+        }
+
+        // 3. Consolida todo o texto raspado
+        const fullContent = [mainContent, ...extraContents].join("\n").trim();
+
+        // 4. Limpeza e extração por padrão de notas
         const cleanContent = fullContent
           .replace(/&nbsp;/g, ' ')
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
@@ -137,7 +149,6 @@ export default {
           }
         }
 
-        // Deduplicação de baterias capturadas
         const unicos = [];
         const keys = new Set();
         heatsFound.forEach(h => {
