@@ -4,10 +4,11 @@ export default {
 
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url') || 'https://www.worldsurfleague.com/events/2026/ct/438/rip-curl-pro-bells-beach/results';
+      const catParam = url.searchParams.get('cat') || 'masculino';
+      const catId = catParam === 'feminino' ? '2' : '1';
 
-      if (!targetURL.endsWith('/results') && !targetURL.includes('/results?')) {
-        targetURL = targetURL.replace(/\/main\/?$/, '') + '/results';
-      }
+      const baseUrl = targetURL.split('?')[0];
+      const targetCatURL = `${baseUrl}?eventCatId=${catId}`;
 
       const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
@@ -61,30 +62,13 @@ export default {
           }
         };
 
-        const mainContent = await scrapeSingleUrl(targetURL);
+        const rawContent = await scrapeSingleUrl(targetCatURL);
 
-        if (!mainContent) {
-          throw new Error("Não foi possível obter o conteúdo da WSL.");
+        if (!rawContent) {
+          throw new Error("Não foi possível obter os dados da WSL.");
         }
 
-        const roundMatches = [...mainContent.matchAll(/(?:roundId|eventCatId)=(\d+)/g)];
-        let discoveredParams = [...new Set(roundMatches.map(m => m[0]))];
-
-        if (discoveredParams.length === 0) {
-          discoveredParams = ['eventCatId=1', 'eventCatId=2'];
-        }
-
-        const baseUrl = targetURL.split('?')[0];
-        const extraUrls = discoveredParams
-          .map(param => `${baseUrl}?${param}`)
-          .filter(u => u !== targetURL)
-          .slice(0, 3);
-
-        const extraContents = await Promise.all(extraUrls.map(u => scrapeSingleUrl(u)));
-        const fullContent = [mainContent, ...extraContents].join("\n").trim();
-
-        // LIMPEZA CRÍTICA: Remove combinações de notas de onda como "7.17 + 6.63" para não poluir os totais
-        const cleanContent = fullContent
+        const cleanContent = rawContent
           .replace(/&nbsp;/g, ' ')
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
           .replace(/<[^>]+>/g, '\n')
@@ -103,9 +87,20 @@ export default {
           return bad.some(b => l.includes(b));
         };
 
-        const heatsFound = [];
+        const rawHeats = [];
+        let currentRound = 'r1';
 
+        // Mapeia contextos de rodadas no HTML raspado
         for (let i = 0; i < lines.length; i++) {
+          const lLower = lines[i].toLowerCase();
+
+          if (lLower.includes('opening round') || lLower.includes('round 1')) currentRound = 'r1';
+          else if (lLower.includes('elimination round') || lLower.includes('round 2')) currentRound = 'r2';
+          else if (lLower.includes('round of 32') || lLower.includes('round of 16') || lLower.includes('round 3')) currentRound = 'r3';
+          else if (lLower.includes('quarterfinal') || lLower.includes('quartas')) currentRound = 'qf';
+          else if (lLower.includes('semifinal') || lLower.includes('semis')) currentRound = 'sf';
+          else if (lLower === 'final' || lLower === 'finals') currentRound = 'final';
+
           if (isScore(lines[i])) {
             let p1 = null;
             for (let b = 1; b <= 5 && (i - b) >= 0; b++) {
@@ -132,7 +127,7 @@ export default {
                   if (score1 > score2) winner = p1;
                   else if (score2 > score1) winner = p2;
 
-                  heatsFound.push({ p1, p2, score1, score2, winner });
+                  rawHeats.push({ p1, p2, score1, score2, winner, round: currentRound });
                   i = i + f;
                   break;
                 }
@@ -141,11 +136,15 @@ export default {
           }
         }
 
+        // Ordena estritamente por fluxo cronológico do torneio: R1 -> R2 -> R3 -> QF -> SF -> Final
+        const roundOrder = { r1: 1, r2: 2, r3: 3, qf: 4, sf: 5, final: 6 };
+        rawHeats.sort((a, b) => (roundOrder[a.round] || 99) - (roundOrder[b.round] || 99));
+
         const unicos = [];
         const keys = new Set();
-        heatsFound.forEach(h => {
-          const k = `${h.p1}-${h.p2}`;
-          const kReverse = `${h.p2}-${h.p1}`;
+        rawHeats.forEach(h => {
+          const k = `${h.round}-${h.p1}-${h.p2}`;
+          const kReverse = `${h.round}-${h.p2}-${h.p1}`;
           if (!keys.has(k) && !keys.has(kReverse)) { 
             keys.add(k); 
             unicos.push(h); 
