@@ -122,7 +122,7 @@
     <header class="wsl-header">
         <div class="wsl-brand">
             <span class="wsl-logo">WSL</span>
-            <span class="wsl-title">Championship Tour 2026 (Pro Render)</span>
+            <span class="wsl-title">Championship Tour 2026 (Dynamic)</span>
         </div>
     </header>
 
@@ -138,7 +138,7 @@
             </div>
         </div>
         <div class="actions-group">
-            <button type="button" class="btn-sync-wsl" id="btnSyncWSL" title="Baixar dados e resultados reais da WSL via Anakin">
+            <button type="button" class="btn-sync-wsl" id="btnSyncWSL" title="Baixar dados reais da WSL via Anakin">
                 <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8">
                     <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25"/>
                     <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-linecap="round"/>
@@ -170,6 +170,11 @@
     <div id="toastNotification" class="toast-notification"></div>
 
     <script>
+        let wslEvents = [];
+        let currentEvent = null;
+        let currentCategory = 'masculino';
+        let globalLinksToDraw = [];
+
         function escapeHTML(str) { return !str ? '' : str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
         function getSurferAvatarHTML(name) {
@@ -184,68 +189,27 @@
             return Array.from({ length: count }, (_, i) => ({ id: `h${i + 1}`, p1: 'Aguardando...', p2: 'Aguardando...', winner: null }));
         }
 
-        const wslEvents = [
-			{
-				id: "bells-2026",
-				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/438/rip-curl-pro-bells-beach/results",
-				name: "1. Rip Curl Pro Bells Beach",
-				location: "Bells Beach, Austrália",
-				dates: "01 - 11 Abr, 2026",
-				heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
-			},
-			{
-				id: "margaret-2026",
-				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/439/western-australia-margaret-river-pro/results",
-				name: "2. Margaret River Pro",
-				location: "Margaret River, Austrália",
-				dates: "16 - 26 Abr, 2026",
-				heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
-			},
-			{
-				id: "gold-coast-2026",
-				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/440/bonsoy-gold-coast-pro/results",
-				name: "3. Bonsoy Gold Coast Pro",
-				location: "Snapper Rocks, Austrália",
-				dates: "01 - 11 Mai, 2026",
-				heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
-			},
-			{
-				id: "el-salvador-2026",
-				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/442/surf-city-el-salvador-pro/results",
-				name: "4. Surf City El Salvador Pro",
-				location: "Punta Roca, El Salvador",
-				dates: "05 - 15 Jun, 2026",
-				heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
-			},
-			{
-				id: "rio-2026",
-				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/443/vivo-rio-pro/results",
-				name: "5. VIVO Rio Pro",
-				location: "Saquarema, Brasil",
-				dates: "19 - 27 Jun, 2026",
-				heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
-			},
-			{
-				id: "tahiti-2026",
-				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/444/outerknown-tahiti-pro/results",
-				name: "6. Outerknown Tahiti Pro",
-				location: "Teahupo'o, Taiti",
-				dates: "08 - 18 Ago, 2026",
-				heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
-			},
-			{
-				id: "fiji-2026",
-				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/445/fiji-pro/results",
-				name: "7. Corona Fiji Pro",
-				location: "Cloudbreak, Fiji",
-				dates: "25 Ago - 04 Set, 2026",
-				heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
-			}
-		];
+        async function carregarCalendarioDinamico() {
+            showToast("⏳ Carregando calendário oficial da WSL...");
+            try {
+                const response = await fetch('/api-events');
+                const data = await response.json();
 
-        let currentEvent = wslEvents[0];
-        let currentCategory = 'masculino';
-        let globalLinksToDraw = [];
+                if (data.sucesso && data.eventos && data.eventos.length > 0) {
+                    wslEvents = data.eventos.map(ev => ({
+                        ...ev,
+                        heats: {
+                            masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
+                            feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
+                        }
+                    }));
+                    return true;
+                }
+            } catch (e) {
+                console.error("Erro ao carregar agenda remota:", e);
+            }
+            return false;
+        }
 
         function salvarPalpitesLocal() {
             if (!currentEvent) return;
@@ -270,6 +234,13 @@
         }
 
         async function initApp() {
+            const carregou = await carregarCalendarioDinamico();
+            if (!carregou || wslEvents.length === 0) {
+                showToast("⚠️ Não foi possível carregar o calendário remoto.");
+                return;
+            }
+
+            currentEvent = wslEvents[0];
             populateSelect();
             const possuiCache = carregarPalpitesLocais();
             recalculateCascades();
@@ -329,161 +300,75 @@
         }
 
         async function sincronizarWSLAuto() {
-			showToast("⏳ Conectando à WSL via Anakin.io...");
-			try {
-				// Envia a URL do evento e a categoria ativa (masculino/feminino)
-				const response = await fetch(`/api-wsl?url=${encodeURIComponent(currentEvent.wslUrl)}&cat=${currentCategory}`);
-				const data = await response.json();
-
-				if (!data.sucesso || !data.baterias || data.baterias.length === 0) {
-					showToast(`⚠️ ${data.mensagem || 'Baterias não encontradas.'} Abrindo modo manual...`);
-					document.getElementById('manualSyncBox').classList.add('active');
-					return;
-				}
-
-				aplicarBateriasSincronizadas(data.baterias);
-			} catch (err) {
-				console.error("Erro na busca automática:", err);
-				showToast("⚠️ Falha na conexão automática. Abrindo modo manual...");
-				document.getElementById('manualSyncBox').classList.add('active');
-			}
-		}
-
-        function aplicarBateriasSincronizadas(baterias) {
-			if (!baterias || baterias.length === 0) return;
-
-			const catHeats = currentEvent.heats[currentCategory];
-			const isMasc = currentCategory === 'masculino';
-			const rounds = isMasc ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
-
-			// Mapeia todas as vagas da chave em ordem sequencial
-			const flatSysHeats = [];
-			rounds.forEach(r => {
-				if (catHeats[r]) {
-					catHeats[r].forEach(h => flatSysHeats.push(h));
-				}
-			});
-
-			const getLastName = (name) => {
-				if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
-				const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-				const parts = clean.split(/\s+/);
-				return parts[parts.length - 1];
-			};
-
-			let totalAtualizadas = 0;
-			const totalToFill = Math.min(baterias.length, flatSysHeats.length);
-
-			// Grava as 35 baterias recebidas da API diretamente nas vagas correspondentes
-			for (let idx = 0; idx < totalToFill; idx++) {
-				const ext = baterias[idx];
-				const sysHeat = flatSysHeats[idx];
-
-				sysHeat.p1 = ext.p1;
-				sysHeat.p2 = ext.p2;
-
-				const extWinnerLast = getLastName(ext.winner);
-				if (extWinnerLast) {
-					if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
-					else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
-					else sysHeat.winner = ext.winner;
-				} else {
-					sysHeat.winner = null;
-				}
-				totalAtualizadas++;
-			}
-
-			// Define o campeão da etapa caso a bateria final tenha terminado
-			if (catHeats.final && catHeats.final[0] && catHeats.final[0].winner) {
-				catHeats.champion = catHeats.final[0].winner;
-			}
-
-			// IMPORTANTE: Não chamamos recalculateCascades() aqui para preservar os dados reais da API
-			currentEvent.defined = true;
-			salvarPalpitesLocal();
-			renderBracket();
-			showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
-		}
-
-        function processarHTMLManual() {
-            const html = document.getElementById('wsl-source').value;
-            
-            if (!html || html.length < 100) {
-                showToast("⚠️ Por favor, cole o código-fonte válido da página da WSL.");
-                return;
-            }
-
+            showToast("⏳ Conectando à WSL via Anakin.io...");
             try {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
+                const response = await fetch(`/api-wsl?url=${encodeURIComponent(currentEvent.wslUrl)}&cat=${currentCategory}`);
+                const data = await response.json();
 
-                const heats = doc.querySelectorAll('.hot-heat, .post-event-watch-heat, .bracket-heat, [class*="Heat_container"], [class*="Match"]');
-                if (heats.length === 0) {
-                    showToast("⚠️ Nenhuma bateria encontrada no HTML.");
+                if (!data.sucesso || !data.baterias || data.baterias.length === 0) {
+                    showToast(`⚠️ ${data.mensagem || 'Baterias não encontradas.'} Abrindo modo manual...`);
+                    document.getElementById('manualSyncBox').classList.add('active');
                     return;
                 }
 
-                function getCleanName(athleteEl) {
-                    const img = athleteEl.querySelector('img[alt]');
-                    if (img && img.alt && img.alt.length > 3 && !img.alt.toLowerCase().match(/flag|avatar|logo/)) {
-                        return img.alt.trim();
-                    }
-
-                    const clone = athleteEl.cloneNode(true);
-                    const lixos = clone.querySelectorAll('.hot-heat-athlete__name--short, .athlete-country-name, .hot-heat-athlete__seed, .total, .score, [class*="Score"]');
-                    lixos.forEach(lixo => lixo.remove());
-
-                    const full = clone.querySelector('.hot-heat-athlete__name--full, [class*="FullName"]');
-                    if (full) return full.textContent.trim();
-
-                    const link = clone.querySelector('a');
-                    if (link) return link.textContent.trim().replace(/\s{2,}/g, ' ');
-
-                    let text = clone.textContent.replace(/[0-9.]/g, '').replace(/[\n\r\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-                    return text || 'Aguardando...';
-                }
-
-                const extractedHeats = [];
-
-                heats.forEach(heatEl => {
-                    const athletes = heatEl.querySelectorAll('.hot-heat-athlete, .post-event-watch-heat-athlete, .bracket-athlete, [class*="Athlete_container"], [class*="Participant"]');
-                    if (athletes.length >= 2) {
-                        let p1 = getCleanName(athletes[0]);
-                        let p2 = getCleanName(athletes[1]);
-
-                        if (p1.match(/tbd|tbc/i)) p1 = 'Aguardando...';
-                        if (p2.match(/tbd|tbc/i)) p2 = 'Aguardando...';
-
-                        if (p1 === 'Aguardando...' && p2 === 'Aguardando...') return;
-
-                        let winner = null;
-                        if (p1 !== 'Aguardando...' && p2 !== 'Aguardando...' && p1 !== p2) {
-                            const isWin1 = athletes[0].className.match(/is-advancing|is-winner|winner/i) || athletes[0].querySelector('.is-advancing, .is-winner, .color-red, .hot-heat-athlete__difference');
-                            const isWin2 = athletes[1].className.match(/is-advancing|is-winner|winner/i) || athletes[1].querySelector('.is-advancing, .is-winner, .color-red, .hot-heat-athlete__difference');
-                            
-                            if (isWin1 && !isWin2) winner = p1;
-                            else if (isWin2 && !isWin1) winner = p2;
-                            else {
-                                const s1 = parseFloat(athletes[0].querySelector('.total, .score, [class*="Score"]')?.textContent) || 0;
-                                const s2 = parseFloat(athletes[1].querySelector('.total, .score, [class*="Score"]')?.textContent) || 0;
-                                if (s1 > s2) winner = p1;
-                                else if (s2 > s1) winner = p2;
-                            }
-                        }
-
-                        extractedHeats.push({ p1, p2, winner });
-                    }
-                });
-
-                aplicarBateriasSincronizadas(extractedHeats);
-
-                document.getElementById('manualSyncBox').classList.remove('active');
-                document.getElementById('wsl-source').value = '';
-
-            } catch(err) {
-                console.error("Erro de Parse:", err);
-                showToast("⚠️ Ocorreu um erro técnico na leitura do HTML.");
+                aplicarBateriasSincronizadas(data.baterias);
+            } catch (err) {
+                console.error("Erro na busca automática:", err);
+                showToast("⚠️ Falha na conexão automática. Abrindo modo manual...");
+                document.getElementById('manualSyncBox').classList.add('active');
             }
+        }
+
+        function aplicarBateriasSincronizadas(baterias) {
+            if (!baterias || baterias.length === 0) return;
+
+            const catHeats = currentEvent.heats[currentCategory];
+            const isMasc = currentCategory === 'masculino';
+            const rounds = isMasc ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
+
+            const flatSysHeats = [];
+            rounds.forEach(r => {
+                if (catHeats[r]) {
+                    catHeats[r].forEach(h => flatSysHeats.push(h));
+                }
+            });
+
+            const getLastName = (name) => {
+                if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
+                const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                const parts = clean.split(/\s+/);
+                return parts[parts.length - 1];
+            };
+
+            let totalAtualizadas = 0;
+            const totalToFill = Math.min(baterias.length, flatSysHeats.length);
+
+            for (let idx = 0; idx < totalToFill; idx++) {
+                const ext = baterias[idx];
+                const sysHeat = flatSysHeats[idx];
+
+                sysHeat.p1 = ext.p1;
+                sysHeat.p2 = ext.p2;
+
+                const extWinnerLast = getLastName(ext.winner);
+                if (extWinnerLast) {
+                    if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+                    else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+                    else sysHeat.winner = ext.winner;
+                } else {
+                    sysHeat.winner = null;
+                }
+                totalAtualizadas++;
+            }
+
+            if (catHeats.final && catHeats.final[0] && catHeats.final[0].winner) {
+                catHeats.champion = catHeats.final[0].winner;
+            }
+
+            currentEvent.defined = true;
+            salvarPalpitesLocal();
+            renderBracket();
+            showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
         }
 
         function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }
@@ -537,7 +422,7 @@
         }
 
         function renderBanner() {
-            document.getElementById('eventBanner').innerHTML = `<div class="event-meta"><h2>${currentEvent.name}</h2><p>📍 ${currentEvent.location} | 📅 ${currentEvent.dates}</p></div>`;
+            document.getElementById('eventBanner').innerHTML = `<div class="event-meta"><h2>${currentEvent.name}</h2><p>🔗 ${currentEvent.wslUrl}</p></div>`;
         }
 
         function createHeatHTML(heat, round, idx, isFinal) {

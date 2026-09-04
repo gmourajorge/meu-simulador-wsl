@@ -2,132 +2,216 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Content-Type': 'application/json'
+    };
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+    const headers = {
+      "X-API-Key": env.ANAKIN_API_KEY,
+      "Content-Type": "application/json"
+    };
+
+    // Função utilitária para consumo do Url-Scraper do Anakin.io
+    const scrapeSingleUrl = async (fetchUrl, format = "markdown") => {
+      try {
+        const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            url: fetchUrl,
+            country: "us",
+            useBrowser: true,
+            formats: [format]
+          })
+        });
+
+        if (!submitRes.ok) return "";
+        const jobData = await submitRes.json();
+        const jobId = jobData.jobId || jobData.id;
+        if (!jobId) return "";
+
+        let attempts = 0;
+        while (attempts < 20) {
+          await new Promise(r => setTimeout(r, 1000));
+          attempts++;
+
+          const pollRes = await fetch(`https://api.anakin.io/v1/url-scraper/${jobId}`, { headers });
+          if (pollRes.ok) {
+            const result = await pollRes.json();
+            if (result.status === "completed") {
+              return result.markdown || result.html || (result.data ? result.data.markdown || result.data.html : "");
+            } else if (result.status === "failed") {
+              break;
+            }
+          }
+        }
+        return "";
+      } catch (e) {
+        return "";
+      }
+    };
+
+    // =========================================================================
+    // ENDPOINT 1: /api-events -> Raspa o Calendário Oficial 2026 CT da WSL
+    // =========================================================================
+    if (url.pathname === '/api-events') {
+      try {
+        const markdown = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1');
+
+        if (!markdown) {
+          throw new Error("Não foi possível carregar a agenda oficial da WSL.");
+        }
+
+        // Extrai os links das etapas CT no formato: /events/2026/ct/{eventId}/{slug}/main
+        const eventRegex = /\[([^\]]+)\]\(https:\/\/www\.worldsurfleague\.com\/events\/2026\/ct\/(\d+)\/([^/]+)\/(?:main|results)\)/gi;
+        const eventsFound = [];
+        const seenIds = new Set();
+        let match;
+        let index = 1;
+
+        while ((match = eventRegex.exec(markdown)) !== null) {
+          const rawName = match[1].replace(/\\\n/g, ' ').replace(/\n/g, ' ').trim();
+          const eventId = match[2];
+          const slug = match[3];
+
+          if (!seenIds.has(eventId)) {
+            seenIds.add(eventId);
+            eventsFound.push({
+              id: `${slug}-${eventId}`,
+              wslUrl: `https://www.worldsurfleague.com/events/2026/ct/${eventId}/${slug}/results`,
+              name: `${index}. ${rawName}`,
+              eventId: eventId,
+              slug: slug
+            });
+            index++;
+          }
+        }
+
+        return new Response(JSON.stringify({
+          sucesso: true,
+          quantidade: eventsFound.length,
+          eventos: eventsFound
+        }), { headers: corsHeaders });
+
+      } catch (err) {
+        return new Response(JSON.stringify({
+          sucesso: false,
+          mensagem: "Falha ao buscar calendário: " + err.message
+        }), { headers: corsHeaders });
+      }
+    }
+
+    // =========================================================================
+    // ENDPOINT 2: /api-wsl -> Raspa os Confrontos e Resultados da Etapa Selecionada
+    // =========================================================================
     if (url.pathname === '/api-wsl') {
-      let targetURL = url.searchParams.get('url') || 'https://www.worldsurfleague.com/events/2026/ct/438/rip-curl-pro-bells-beach/results';
-      const catParam = url.searchParams.get('cat') || 'masculino';
+		let targetURL = url.searchParams.get('url');
+
+		if (!targetURL) {
+			return new Response(JSON.stringify({ 
+			  sucesso: false, 
+			  mensagem: "Parâmetro 'url' é obrigatório." 
+			}), { status: 400, headers: corsHeaders });
+		}
+
+	  const catParam = url.searchParams.get('cat') || 'masculino';
+	  const catId = catParam === 'feminino' ? '2' : '1';
+	  const catParam = url.searchParams.get('cat') || 'masculino';
       const catId = catParam === 'feminino' ? '2' : '1';
+
+      if (!targetURL.endsWith('/results') && !targetURL.includes('/results?')) {
+        targetURL = targetURL.replace(/\/main\/?$/, '') + '/results';
+      }
 
       const baseUrl = targetURL.split('?')[0];
       const targetCatURL = `${baseUrl}?eventCatId=${catId}`;
 
-      const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-        'Content-Type': 'application/json'
-      };
-
-      if (request.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders });
-      }
-
       try {
-        const headers = {
-          "X-API-Key": env.ANAKIN_API_KEY,
-          "Content-Type": "application/json"
-        };
+        // 1. Raspa a página principal com o filtro da categoria
+        const mainMarkdown = await scrapeSingleUrl(targetCatURL);
 
-        const scrapeSingleUrl = async (fetchUrl) => {
-          try {
-            const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
-              method: "POST",
-              headers,
-              body: JSON.stringify({
-                url: fetchUrl,
-                country: "us",
-                useBrowser: true,
-                formats: ["markdown", "html"]
-              })
-            });
-
-            if (!submitRes.ok) return "";
-            const jobData = await submitRes.json();
-            const jobId = jobData.jobId || jobData.id;
-            if (!jobId) return "";
-
-            let attempts = 0;
-            while (attempts < 20) {
-              await new Promise(r => setTimeout(r, 1000));
-              attempts++;
-              const pollRes = await fetch(`https://api.anakin.io/v1/url-scraper/${jobId}`, { headers });
-              if (pollRes.ok) {
-                const result = await pollRes.json();
-                if (result.status === "completed") {
-                  return result.markdown || result.html || (result.data ? result.data.markdown || result.data.html : "");
-                } else if (result.status === "failed") break;
-              }
-            }
-            return "";
-          } catch (e) {
-            return "";
-          }
-        };
-
-        const rawContent = await scrapeSingleUrl(targetCatURL);
-
-        if (!rawContent) {
-          throw new Error("Não foi possível obter os dados da WSL.");
+        if (!mainMarkdown) {
+          throw new Error("Não foi possível obter os dados da etapa na WSL.");
         }
 
-        const cleanContent = rawContent
-          .replace(/&nbsp;/g, ' ')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-          .replace(/<[^>]+>/g, '\n')
-          .replace(/\d{1,2}\.\d{1,2}\s*\+\s*\d{1,2}\.\d{1,2}/g, '')
+        // 2. Identifica sub-páginas por roundId (ex: Round One e Bracket)
+        const roundIds = [...new Set([...mainMarkdown.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
+
+        let extraMarkdowns = [];
+        if (roundIds.length > 0) {
+          const roundUrls = roundIds.map(rid => `${baseUrl}?eventCatId=${catId}&roundId=${rid}`);
+          extraMarkdowns = await Promise.all(roundUrls.map(u => scrapeSingleUrl(u)));
+        }
+
+        const fullMarkdown = [mainMarkdown, ...extraMarkdowns].join("\n\n");
+
+        // 3. Sanitização do Markdown
+        const cleanLines = fullMarkdown
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')                     // Remove links Markdown
+          .replace(/\d+\s*waves/gi, '')                                 // Remove contadores de ondas ("6 waves")
+          .replace(/\d{1,2}\.\d{1,2}\s*\+\s*\d{1,2}\.\d{1,2}/g, '')     // Remove somas de ondas parciais ("7.17 + 6.63")
           .replace(/Make heat picks|\*Fan picks|Details|Replay|Watch [^\n]+/gi, '')
-          .replace(/\r\n|\r/g, '\n');
+          .replace(/\r\n|\r/g, '\n')
+          .split('\n')
+          .map(l => l.trim())
+          .filter(l => l.length > 0);
 
-        const lines = cleanContent.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const isScore = (s) => /^\d{1,2}\.\d{2}$/.test(s) && parseFloat(s) <= 20.0;
 
-        const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) > 0;
-        
         const isBadName = (s) => {
           if (!s || s.length < 2 || s.length > 35 || /\d/.test(s)) return true;
-          const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro', 'event', 'product', 'attribute', 'value', 'description', 'image', 'tourism', 'airways', 'resort', 'island', 'surf', 'surfline', 'corona', 'cero', 'status', 'rank'];
+          const bad = [
+            'heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal',
+            'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply',
+            'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro', 'event', 'product',
+            'attribute', 'value', 'description', 'image', 'tourism', 'airways', 'resort',
+            'island', 'surf', 'surfline', 'corona', 'cero', 'status', 'rank',
+            'congratulations', 'presented', 'completed'
+          ];
           const l = s.toLowerCase();
           return bad.some(b => l.includes(b));
         };
 
-        const rawHeats = [];
-        let currentRound = 'r1';
+        const heatsFound = [];
 
-        // Mapeia contextos de rodadas no HTML raspado
-        for (let i = 0; i < lines.length; i++) {
-          const lLower = lines[i].toLowerCase();
-
-          if (lLower.includes('opening round') || lLower.includes('round 1')) currentRound = 'r1';
-          else if (lLower.includes('elimination round') || lLower.includes('round 2')) currentRound = 'r2';
-          else if (lLower.includes('round of 32') || lLower.includes('round of 16') || lLower.includes('round 3')) currentRound = 'r3';
-          else if (lLower.includes('quarterfinal') || lLower.includes('quartas')) currentRound = 'qf';
-          else if (lLower.includes('semifinal') || lLower.includes('semis')) currentRound = 'sf';
-          else if (lLower === 'final' || lLower === 'finals') currentRound = 'final';
-
-          if (isScore(lines[i])) {
+        for (let i = 0; i < cleanLines.length; i++) {
+          if (isScore(cleanLines[i])) {
             let p1 = null;
-            for (let b = 1; b <= 5 && (i - b) >= 0; b++) {
-              if (!isBadName(lines[i - b])) {
-                p1 = lines[i - b];
+            // Busca o nome do Atleta 1 acima da nota
+            for (let b = 1; b <= 4 && (i - b) >= 0; b++) {
+              if (!isBadName(cleanLines[i - b])) {
+                p1 = cleanLines[i - b];
                 break;
               }
             }
 
-            for (let f = 1; f <= 8 && (i + f) < lines.length; f++) {
-              if (isScore(lines[i + f])) {
+            // Busca a nota do Atleta 2 abaixo
+            for (let f = 1; f <= 6 && (i + f) < cleanLines.length; f++) {
+              if (isScore(cleanLines[i + f])) {
                 let p2 = null;
+                // Busca o nome do Atleta 2 no intervalo entre as duas notas
                 for (let k = i + 1; k < i + f; k++) {
-                  if (!isBadName(lines[k])) {
-                    p2 = lines[k];
+                  if (!isBadName(cleanLines[k])) {
+                    p2 = cleanLines[k];
                     break;
                   }
                 }
 
                 if (p1 && p2 && p1 !== p2) {
-                  const score1 = parseFloat(lines[i]);
-                  const score2 = parseFloat(lines[i + f]);
+                  const score1 = parseFloat(cleanLines[i]);
+                  const score2 = parseFloat(cleanLines[i + f]);
                   let winner = null;
                   if (score1 > score2) winner = p1;
                   else if (score2 > score1) winner = p2;
 
-                  rawHeats.push({ p1, p2, score1, score2, winner, round: currentRound });
+                  heatsFound.push({ p1, p2, score1, score2, winner });
                   i = i + f;
                   break;
                 }
@@ -136,18 +220,15 @@ export default {
           }
         }
 
-        // Ordena estritamente por fluxo cronológico do torneio: R1 -> R2 -> R3 -> QF -> SF -> Final
-        const roundOrder = { r1: 1, r2: 2, r3: 3, qf: 4, sf: 5, final: 6 };
-        rawHeats.sort((a, b) => (roundOrder[a.round] || 99) - (roundOrder[b.round] || 99));
-
+        // Deduplicação de baterias
         const unicos = [];
         const keys = new Set();
-        rawHeats.forEach(h => {
-          const k = `${h.round}-${h.p1}-${h.p2}`;
-          const kReverse = `${h.round}-${h.p2}-${h.p1}`;
-          if (!keys.has(k) && !keys.has(kReverse)) { 
-            keys.add(k); 
-            unicos.push(h); 
+        heatsFound.forEach(h => {
+          const k = `${h.p1}-${h.p2}`;
+          const kRev = `${h.p2}-${h.p1}`;
+          if (!keys.has(k) && !keys.has(kRev)) {
+            keys.add(k);
+            unicos.push(h);
           }
         });
 
@@ -158,9 +239,9 @@ export default {
         }), { headers: corsHeaders });
 
       } catch (err) {
-        return new Response(JSON.stringify({ 
-          sucesso: false, 
-          mensagem: "Falha na extração: " + err.message 
+        return new Response(JSON.stringify({
+          sucesso: false,
+          mensagem: "Falha na extração de baterias: " + err.message
         }), { headers: corsHeaders });
       }
     }
