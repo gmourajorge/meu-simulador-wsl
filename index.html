@@ -185,101 +185,197 @@
         }
 
         const wslEvents = [
-            {
-                id: "fiji-2026",
-                wslUrl: "https://www.worldsurfleague.com/events/2026/ct/442/fiji-pro/results",
-                name: "Corona Fiji Pro",
-                location: "Cloudbreak, Fiji",
-                dates: "25 Ago - 04 Set, 2026",
-                defined: true,
-                heats: {
-                    masculino: {
-                        r1: [
-                            { id: "r1_h1", p1: "Luke Thompson", p2: "Matthew McGillivray", winner: null },
-                            { id: "r1_h2", p1: "Eli Hanneman", p2: "Teo Degei", winner: null },
-                            { id: "r1_h3", p1: "Mateus Herdy", p2: "Jarvis Earle", winner: null },
-                            { id: "r1_h4", p1: "Ramzi Boukhiam", p2: "Oscar Berry", winner: null }
-                        ],
-                        r2: [
-                            { id: "r2_h1", p1: "Marco Mignot", p2: "Seth Moniz", winner: null },
-                            { id: "r2_h2", p1: "Ethan Ewing", p2: "Cole Houshmand", winner: null },
-                            { id: "r2_h3", p1: "Yago Dora", p2: "Vencedor R1 H3", winner: null },
-                            { id: "r2_h4", p1: "Kanoa Igarashi", p2: "Alan Cleland", winner: null },
-                            { id: "r2_h5", p1: "João Chianca", p2: "Morgan Cibilic", winner: null },
-                            { id: "r2_h6", p1: "Leonardo Fioravanti", p2: "Vencedor R1 H2", winner: null },
-                            { id: "r2_h7", p1: "Liam O'Brien", p2: "Callum Robson", winner: null },
-                            { id: "r2_h8", p1: "George Pittar", p2: "Jake Marshall", winner: null },
-                            { id: "r2_h9", p1: "Ítalo Ferreira", p2: "Vencedor R1 H1", winner: null },
-                            { id: "r2_h10", p1: "Connor O'Leary", p2: "Filipe Toledo", winner: null },
-                            { id: "r2_h11", p1: "Samuel Pupo", p2: "Alejo Muniz", winner: null },
-                            { id: "r2_h12", p1: "Griffin Colapinto", p2: "Rio Waida", winner: null },
-                            { id: "r2_h13", p1: "Miguel Pupo", p2: "Vencedor R1 H4", winner: null },
-                            { id: "r2_h14", p1: "Kauli Vaast", p2: "Crosby Colapinto", winner: null },
-                            { id: "r2_h15", p1: "Jack Robinson", p2: "Barron Mamiya", winner: null },
-                            { id: "r2_h16", p1: "Gabriel Medina", p2: "Joel Vaughan", winner: null }
-                        ],
-                        r3: createEmptyHeats(8),
-                        qf: createEmptyHeats(4),
-                        sf: createEmptyHeats(2),
-                        final: createEmptyHeats(1),
-                        champion: null
-                    },
-                    feminino: {
-                        r1: [
-                            { id: "r1_h1", p1: "Stephanie Gilmore", p2: "Yolanda Hopkins", winner: null },
-                            { id: "r1_h2", p1: "Alyssa Spencer", p2: "Tya Zebrowski", winner: null },
-                            { id: "r1_h3", p1: "Anat Lelior", p2: "Sally Fitzgibbons", winner: null },
-                            { id: "r1_h4", p1: "Bettylou Sakura Johnson", p2: "Vahine Fierro", winner: null },
-                            { id: "r1_h5", p1: "Tyler Wright", p2: "Brisa Hennessy", winner: null },
-                            { id: "r1_h6", p1: "Erin Brooks", p2: "Bella Kenworthy", winner: null },
-                            { id: "r1_h7", p1: "Isabella Nichols", p2: "Francisca Veselko", winner: null },
-                            { id: "r1_h8", p1: "Nadia Erostarbe", p2: "Te'a Kurop", winner: null }
-                        ],
-                        r2: [
-                            { id: "r2_h1", p1: "Carissa Moore", p2: "Vencedora R1 H2", winner: null },
-                            { id: "r2_h2", p1: "Luana Silva", p2: "Vencedora R1 H5", winner: null },
-                            { id: "r2_h3", p1: "Sawyer Lindblad", p2: "Vencedora R1 H3", winner: null },
-                            { id: "r2_h4", p1: "Lakey Peterson", p2: "Vencedora R1 H7", winner: null },
-                            { id: "r2_h5", p1: "Gabriela Bryan", p2: "Vencedora R1 H1", winner: null },
-                            { id: "r2_h6", p1: "Caitlin Simmers", p2: "Vencedora R1 H8", winner: null },
-                            { id: "r2_h7", p1: "Molly Picklum", p2: "Vencedora R1 H4", winner: null },
-                            { id: "r2_h8", p1: "Caroline Marks", p2: "Vencedora R1 H6", winner: null }
-                        ],
-                        qf: createEmptyHeats(4),
-                        sf: createEmptyHeats(2),
-                        final: createEmptyHeats(1),
-                        champion: null
-                    }
-                }
-            },
-            { 
-                id: "trestles-2026", 
-                wslUrl: "https://www.worldsurfleague.com/events/2026/ct/443/lexus-trestles-pro/results",
-                name: "Lexus Trestles Pro", 
-                location: "Califórnia, EUA", 
-                dates: "11 - 20 Set, 2026", 
-                defined: false,
-                heats: {
-                    masculino: {
-                        r1: createEmptyHeats(4),
-                        r2: createEmptyHeats(16),
-                        r3: createEmptyHeats(8),
-                        qf: createEmptyHeats(4),
-                        sf: createEmptyHeats(2),
-                        final: createEmptyHeats(1),
-                        champion: null
-                    },
-                    feminino: {
-                        r1: createEmptyHeats(8),
-                        r2: createEmptyHeats(8),
-                        qf: createEmptyHeats(4),
-                        sf: createEmptyHeats(2),
-                        final: createEmptyHeats(1),
-                        champion: null
-                    }
-                }
-            }
-        ];
+			{
+				id: "pipe-2026",
+				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/435/lexus-pipe-pro/results",
+				name: "Lexus Pipe Pro",
+				location: "Banzai Pipeline, Havaí",
+				dates: "29 Jan - 10 Fev, 2026",
+				defined: false,
+				heats: {
+					masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
+					feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
+				}
+			},
+			{
+				id: "sunset-2026",
+				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/436/hurley-pro-sunset-beach/results",
+				name: "Hurley Pro Sunset Beach",
+				location: "Sunset Beach, Havaí",
+				dates: "12 - 23 Fev, 2026",
+				defined: false,
+				heats: {
+					masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
+					feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
+				}
+			},
+			{
+				id: "portugal-2026",
+				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/437/meo-rip-curl-pro-portugal/results",
+				name: "MEO Rip Curl Pro Portugal",
+				location: "Peniche, Portugal",
+				dates: "06 - 16 Mar, 2026",
+				defined: false,
+				heats: {
+					masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
+					feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
+				}
+			},
+			{
+				id: "bells-2026",
+				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/438/rip-curl-pro-bells-beach/results",
+				name: "Rip Curl Pro Bells Beach",
+				location: "Bells Beach, Austrália",
+				dates: "01 - 11 Abr, 2026",
+				defined: false,
+				heats: {
+					masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
+					feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
+				}
+			},
+			{
+				id: "margaret-2026",
+				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/439/western-australia-margaret-river-pro/results",
+				name: "Western Australia Margaret River Pro",
+				location: "Margaret River, Austrália",
+				dates: "18 - 28 Abr, 2026",
+				defined: false,
+				heats: {
+					masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
+					feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
+				}
+			},
+			{
+				id: "el-salvador-2026",
+				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/440/surf-city-el-salvador-pro/results",
+				name: "Surf City El Salvador Pro",
+				location: "Punta Roca, El Salvador",
+				dates: "04 - 13 Jun, 2026",
+				defined: false,
+				heats: {
+					masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
+					feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
+				}
+			},
+			{
+				id: "rio-2026",
+				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/441/vivo-rio-pro/results",
+				name: "Vivo Rio Pro",
+				location: "Saquarema, Brasil",
+				dates: "22 - 30 Jun, 2026",
+				defined: false,
+				heats: {
+					masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
+					feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
+				}
+			},
+			{
+				id: "tahiti-2026",
+				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/444/shiseido-tahiti-pro/results",
+				name: "SHISEIDO Tahiti Pro",
+				location: "Teahupo'o, Taiti",
+				dates: "08 - 18 Jul, 2026",
+				defined: false,
+				heats: {
+					masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
+					feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
+				}
+			},
+			{
+				id: "fiji-2026",
+				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/442/fiji-pro/results",
+				name: "Corona Fiji Pro",
+				location: "Cloudbreak, Fiji",
+				dates: "25 Ago - 04 Set, 2026",
+				defined: true,
+				heats: {
+					masculino: {
+						r1: [
+							{ id: "r1_h1", p1: "Luke Thompson", p2: "Matthew McGillivray", winner: null },
+							{ id: "r1_h2", p1: "Eli Hanneman", p2: "Teo Degei", winner: null },
+							{ id: "r1_h3", p1: "Mateus Herdy", p2: "Jarvis Earle", winner: null },
+							{ id: "r1_h4", p1: "Ramzi Boukhiam", p2: "Oscar Berry", winner: null }
+						],
+						r2: [
+							{ id: "r2_h1", p1: "Marco Mignot", p2: "Seth Moniz", winner: null },
+							{ id: "r2_h2", p1: "Ethan Ewing", p2: "Cole Houshmand", winner: null },
+							{ id: "r2_h3", p1: "Yago Dora", p2: "Vencedor R1 H3", winner: null },
+							{ id: "r2_h4", p1: "Kanoa Igarashi", p2: "Alan Cleland", winner: null },
+							{ id: "r2_h5", p1: "João Chianca", p2: "Morgan Cibilic", winner: null },
+							{ id: "r2_h6", p1: "Leonardo Fioravanti", p2: "Vencedor R1 H2", winner: null },
+							{ id: "r2_h7", p1: "Liam O'Brien", p2: "Callum Robson", winner: null },
+							{ id: "r2_h8", p1: "George Pittar", p2: "Jake Marshall", winner: null },
+							{ id: "r2_h9", p1: "Ítalo Ferreira", p2: "Vencedor R1 H1", winner: null },
+							{ id: "r2_h10", p1: "Connor O'Leary", p2: "Filipe Toledo", winner: null },
+							{ id: "r2_h11", p1: "Samuel Pupo", p2: "Alejo Muniz", winner: null },
+							{ id: "r2_h12", p1: "Griffin Colapinto", p2: "Rio Waida", winner: null },
+							{ id: "r2_h13", p1: "Miguel Pupo", p2: "Vencedor R1 H4", winner: null },
+							{ id: "r2_h14", p1: "Kauli Vaast", p2: "Crosby Colapinto", winner: null },
+							{ id: "r2_h15", p1: "Jack Robinson", p2: "Barron Mamiya", winner: null },
+							{ id: "r2_h16", p1: "Gabriel Medina", p2: "Joel Vaughan", winner: null }
+						],
+						r3: createEmptyHeats(8),
+						qf: createEmptyHeats(4),
+						sf: createEmptyHeats(2),
+						final: createEmptyHeats(1),
+						champion: null
+					},
+					feminino: {
+						r1: [
+							{ id: "r1_h1", p1: "Stephanie Gilmore", p2: "Yolanda Hopkins", winner: null },
+							{ id: "r1_h2", p1: "Alyssa Spencer", p2: "Tya Zebrowski", winner: null },
+							{ id: "r1_h3", p1: "Anat Lelior", p2: "Sally Fitzgibbons", winner: null },
+							{ id: "r1_h4", p1: "Bettylou Sakura Johnson", p2: "Vahine Fierro", winner: null },
+							{ id: "r1_h5", p1: "Tyler Wright", p2: "Brisa Hennessy", winner: null },
+							{ id: "r1_h6", p1: "Erin Brooks", p2: "Bella Kenworthy", winner: null },
+							{ id: "r1_h7", p1: "Isabella Nichols", p2: "Francisca Veselko", winner: null },
+							{ id: "r1_h8", p1: "Nadia Erostarbe", p2: "Te'a Kurop", winner: null }
+						],
+						r2: [
+							{ id: "r2_h1", p1: "Carissa Moore", p2: "Vencedora R1 H2", winner: null },
+							{ id: "r2_h2", p1: "Luana Silva", p2: "Vencedora R1 H5", winner: null },
+							{ id: "r2_h3", p1: "Sawyer Lindblad", p2: "Vencedora R1 H3", winner: null },
+							{ id: "r2_h4", p1: "Lakey Peterson", p2: "Vencedora R1 H7", winner: null },
+							{ id: "r2_h5", p1: "Gabriela Bryan", p2: "Vencedora R1 H1", winner: null },
+							{ id: "r2_h6", p1: "Caitlin Simmers", p2: "Vencedora R1 H8", winner: null },
+							{ id: "r2_h7", p1: "Molly Picklum", p2: "Vencedora R1 H4", winner: null },
+							{ id: "r2_h8", p1: "Caroline Marks", p2: "Vencedora R1 H6", winner: null }
+						],
+						qf: createEmptyHeats(4),
+						sf: createEmptyHeats(2),
+						final: createEmptyHeats(1),
+						champion: null
+					}
+				}
+			},
+			{ 
+				id: "trestles-2026", 
+				wslUrl: "https://www.worldsurfleague.com/events/2026/ct/443/lexus-trestles-pro/results",
+				name: "Lexus Trestles Pro (WSL Finals)", 
+				location: "Califórnia, EUA", 
+				dates: "11 - 20 Set, 2026", 
+				defined: false,
+				heats: {
+					masculino: {
+						r1: createEmptyHeats(4),
+						r2: createEmptyHeats(16),
+						r3: createEmptyHeats(8),
+						qf: createEmptyHeats(4),
+						sf: createEmptyHeats(2),
+						final: createEmptyHeats(1),
+						champion: null
+					},
+					feminino: {
+						r1: createEmptyHeats(8),
+						r2: createEmptyHeats(8),
+						qf: createEmptyHeats(4),
+						sf: createEmptyHeats(2),
+						final: createEmptyHeats(1),
+						champion: null
+					}
+				}
+			}
+		];
 
         let currentEvent = wslEvents[0];
         let currentCategory = 'masculino';
