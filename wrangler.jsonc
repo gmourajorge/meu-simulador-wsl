@@ -1,0 +1,8 @@
+{
+  "name": "meu-simulador-wsl",
+  "compatibility_date": "2026-08-31",
+  "main": "worker.js",
+  "assets": {
+    "directory": "."
+  }
+}
