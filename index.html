@@ -349,52 +349,60 @@
         }
 
         function aplicarBateriasSincronizadas(baterias) {
-            if (!baterias || baterias.length === 0) return;
+			if (!baterias || baterias.length === 0) return;
 
-            const catHeats = currentEvent.heats[currentCategory];
-            const isMasc = currentCategory === 'masculino';
-            const rounds = isMasc ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
+			const catHeats = currentEvent.heats[currentCategory];
+			const isMasc = currentCategory === 'masculino';
+			const rounds = isMasc ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
 
-            const flatSysHeats = [];
-            rounds.forEach(r => {
-                if (catHeats[r]) {
-                    catHeats[r].forEach(h => flatSysHeats.push(h));
-                }
-            });
+			// Mapeia todas as vagas da chave em ordem sequencial
+			const flatSysHeats = [];
+			rounds.forEach(r => {
+				if (catHeats[r]) {
+					catHeats[r].forEach(h => flatSysHeats.push(h));
+				}
+			});
 
-            const getLastName = (name) => {
-                if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
-                const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-                const parts = clean.split(/\s+/);
-                return parts[parts.length - 1];
-            };
+			const getLastName = (name) => {
+				if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
+				const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+				const parts = clean.split(/\s+/);
+				return parts[parts.length - 1];
+			};
 
-            let totalAtualizadas = 0;
-            const totalToFill = Math.min(baterias.length, flatSysHeats.length);
+			let totalAtualizadas = 0;
+			const totalToFill = Math.min(baterias.length, flatSysHeats.length);
 
-            // Preenchimento sequencial garantido das baterias extraídas
-            for (let idx = 0; idx < totalToFill; idx++) {
-                const ext = baterias[idx];
-                const sysHeat = flatSysHeats[idx];
+			// Grava as 35 baterias recebidas da API diretamente nas vagas correspondentes
+			for (let idx = 0; idx < totalToFill; idx++) {
+				const ext = baterias[idx];
+				const sysHeat = flatSysHeats[idx];
 
-                sysHeat.p1 = ext.p1;
-                sysHeat.p2 = ext.p2;
+				sysHeat.p1 = ext.p1;
+				sysHeat.p2 = ext.p2;
 
-                const extWinnerLast = getLastName(ext.winner);
-                if (extWinnerLast) {
-                    if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
-                    else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
-                    else sysHeat.winner = ext.winner;
-                }
-                totalAtualizadas++;
-            }
+				const extWinnerLast = getLastName(ext.winner);
+				if (extWinnerLast) {
+					if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+					else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+					else sysHeat.winner = ext.winner;
+				} else {
+					sysHeat.winner = null;
+				}
+				totalAtualizadas++;
+			}
 
-            currentEvent.defined = true;
-            recalculateCascades();
-            salvarPalpitesLocal();
-            renderBracket();
-            showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
-        }
+			// Define o campeão da etapa caso a bateria final tenha terminado
+			if (catHeats.final && catHeats.final[0] && catHeats.final[0].winner) {
+				catHeats.champion = catHeats.final[0].winner;
+			}
+
+			// IMPORTANTE: Não chamamos recalculateCascades() aqui para preservar os dados reais da API
+			currentEvent.defined = true;
+			salvarPalpitesLocal();
+			renderBracket();
+			showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
+		}
 
         function processarHTMLManual() {
             const html = document.getElementById('wsl-source').value;
