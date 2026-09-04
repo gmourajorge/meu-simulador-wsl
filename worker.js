@@ -18,7 +18,6 @@ export default {
       "Content-Type": "application/json"
     };
 
-    // Função utilitária para consumo do Url-Scraper do Anakin.io
     const scrapeSingleUrl = async (fetchUrl, format = "markdown") => {
       try {
         const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
@@ -69,7 +68,6 @@ export default {
           throw new Error("Não foi possível carregar a agenda oficial da WSL.");
         }
 
-        // Extrai os links das etapas CT no formato: /events/2026/ct/{eventId}/{slug}/main
         const eventRegex = /\[([^\]]+)\]\(https:\/\/www\.worldsurfleague\.com\/events\/2026\/ct\/(\d+)\/([^/]+)\/(?:main|results)\)/gi;
         const eventsFound = [];
         const seenIds = new Set();
@@ -112,18 +110,16 @@ export default {
     // ENDPOINT 2: /api-wsl -> Raspa os Confrontos e Resultados da Etapa Selecionada
     // =========================================================================
     if (url.pathname === '/api-wsl') {
-		let targetURL = url.searchParams.get('url');
+      let targetURL = url.searchParams.get('url');
 
-		if (!targetURL) {
-			return new Response(JSON.stringify({ 
-			  sucesso: false, 
-			  mensagem: "Parâmetro 'url' é obrigatório." 
-			}), { status: 400, headers: corsHeaders });
-		}
+      if (!targetURL) {
+        return new Response(JSON.stringify({ 
+          sucesso: false, 
+          mensagem: "Parâmetro 'url' é obrigatório." 
+        }), { status: 400, headers: corsHeaders });
+      }
 
-	  const catParam = url.searchParams.get('cat') || 'masculino';
-	  const catId = catParam === 'feminino' ? '2' : '1';
-	  const catParam = url.searchParams.get('cat') || 'masculino';
+      const catParam = url.searchParams.get('cat') || 'masculino';
       const catId = catParam === 'feminino' ? '2' : '1';
 
       if (!targetURL.endsWith('/results') && !targetURL.includes('/results?')) {
@@ -134,14 +130,12 @@ export default {
       const targetCatURL = `${baseUrl}?eventCatId=${catId}`;
 
       try {
-        // 1. Raspa a página principal com o filtro da categoria
         const mainMarkdown = await scrapeSingleUrl(targetCatURL);
 
         if (!mainMarkdown) {
           throw new Error("Não foi possível obter os dados da etapa na WSL.");
         }
 
-        // 2. Identifica sub-páginas por roundId (ex: Round One e Bracket)
         const roundIds = [...new Set([...mainMarkdown.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
 
         let extraMarkdowns = [];
@@ -152,11 +146,10 @@ export default {
 
         const fullMarkdown = [mainMarkdown, ...extraMarkdowns].join("\n\n");
 
-        // 3. Sanitização do Markdown
         const cleanLines = fullMarkdown
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')                     // Remove links Markdown
-          .replace(/\d+\s*waves/gi, '')                                 // Remove contadores de ondas ("6 waves")
-          .replace(/\d{1,2}\.\d{1,2}\s*\+\s*\d{1,2}\.\d{1,2}/g, '')     // Remove somas de ondas parciais ("7.17 + 6.63")
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+          .replace(/\d+\s*waves/gi, '')
+          .replace(/\d{1,2}\.\d{1,2}\s*\+\s*\d{1,2}\.\d{1,2}/g, '')
           .replace(/Make heat picks|\*Fan picks|Details|Replay|Watch [^\n]+/gi, '')
           .replace(/\r\n|\r/g, '\n')
           .split('\n')
@@ -184,7 +177,6 @@ export default {
         for (let i = 0; i < cleanLines.length; i++) {
           if (isScore(cleanLines[i])) {
             let p1 = null;
-            // Busca o nome do Atleta 1 acima da nota
             for (let b = 1; b <= 4 && (i - b) >= 0; b++) {
               if (!isBadName(cleanLines[i - b])) {
                 p1 = cleanLines[i - b];
@@ -192,11 +184,9 @@ export default {
               }
             }
 
-            // Busca a nota do Atleta 2 abaixo
             for (let f = 1; f <= 6 && (i + f) < cleanLines.length; f++) {
               if (isScore(cleanLines[i + f])) {
                 let p2 = null;
-                // Busca o nome do Atleta 2 no intervalo entre as duas notas
                 for (let k = i + 1; k < i + f; k++) {
                   if (!isBadName(cleanLines[k])) {
                     p2 = cleanLines[k];
@@ -220,7 +210,6 @@ export default {
           }
         }
 
-        // Deduplicação de baterias
         const unicos = [];
         const keys = new Set();
         heatsFound.forEach(h => {
