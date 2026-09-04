@@ -25,50 +25,63 @@ export default {
           "Content-Type": "application/json"
         };
 
-        // Função interna de scraping via Anakin
-        const scrapeURL = async (fetchUrl) => {
-          const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              url: fetchUrl,
-              country: "us",
-              useBrowser: true,
-              formats: ["markdown", "html"]
-            })
-          });
+        // Função para executar a raspagem de uma URL individual via Anakin
+        const scrapeSingleUrl = async (fetchUrl) => {
+          try {
+            const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                url: fetchUrl,
+                country: "us",
+                useBrowser: true,
+                formats: ["markdown", "html"]
+              })
+            });
 
-          if (!submitRes.ok) return "";
-          const jobData = await submitRes.json();
-          const jobId = jobData.jobId || jobData.id;
-          if (!jobId) return "";
+            if (!submitRes.ok) return "";
+            const jobData = await submitRes.json();
+            const jobId = jobData.jobId || jobData.id;
+            if (!jobId) return "";
 
-          let attempts = 0;
-          while (attempts < 20) {
-            await new Promise(r => setTimeout(r, 1000));
-            attempts++;
-            const pollRes = await fetch(`https://api.anakin.io/v1/url-scraper/${jobId}`, { headers });
-            if (pollRes.ok) {
-              const result = await pollRes.json();
-              if (result.status === "completed") {
-                return result.markdown || result.html || (result.data ? result.data.markdown || result.data.html : "");
-              } else if (result.status === "failed") {
-                break;
+            let attempts = 0;
+            while (attempts < 20) {
+              await new Promise(r => setTimeout(r, 1000));
+              attempts++;
+
+              const pollRes = await fetch(`https://api.anakin.io/v1/url-scraper/${jobId}`, { headers });
+              if (pollRes.ok) {
+                const result = await pollRes.json();
+                if (result.status === "completed") {
+                  return result.markdown || result.html || (result.data ? result.data.markdown || result.data.html : "");
+                } else if (result.status === "failed") {
+                  break;
+                }
               }
             }
+            return "";
+          } catch (e) {
+            return "";
           }
-          return "";
         };
 
-        // Requisita a página principal
-        let content = await scrapeURL(targetURL);
+        // Monta as URLs para raspar Round 1 e o Chaveamento Principal (Bracket)
+        const bracketURL = targetURL.includes('?') ? `${targetURL}&roundId=27069` : `${targetURL}?roundId=27069`;
+        
+        // Executa raspagem em paralelo para capturar todas as fases
+        const [contentRound1, contentBracket] = await Promise.all([
+          scrapeSingleUrl(targetURL),
+          scrapeSingleUrl(bracketURL)
+        ]);
 
-        if (!content) {
-          throw new Error("Não foi possível obter o conteúdo da WSL.");
+        const fullContent = (contentRound1 + "\n" + contentBracket).trim();
+
+        if (!fullContent) {
+          throw new Error("Não foi possível obter os dados da WSL no Anakin.");
         }
 
-        // Normalização e remoção de poluição de interface
-        const cleanContent = content
+        // Limpeza de marcações
+        const cleanContent = fullContent
           .replace(/&nbsp;/g, ' ')
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
           .replace(/<[^>]+>/g, '\n')
@@ -78,6 +91,7 @@ export default {
         const lines = cleanContent.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
         const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) > 0;
+        
         const isBadName = (s) => {
           if (!s || s.length < 2 || s.length > 35 || /\d/.test(s)) return true;
           const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro', 'event', 'product', 'attribute', 'value', 'description', 'image', 'tourism', 'airways', 'resort', 'island', 'surf', 'surfline', 'corona', 'cero'];
@@ -123,11 +137,16 @@ export default {
           }
         }
 
+        // Deduplicação de baterias capturadas
         const unicos = [];
         const keys = new Set();
         heatsFound.forEach(h => {
           const k = `${h.p1}-${h.p2}`;
-          if (!keys.has(k)) { keys.add(k); unicos.push(h); }
+          const kReverse = `${h.p2}-${h.p1}`;
+          if (!keys.has(k) && !keys.has(kReverse)) { 
+            keys.add(k); 
+            unicos.push(h); 
+          }
         });
 
         return new Response(JSON.stringify({
