@@ -40,7 +40,7 @@ export default {
 
         if (syncRes.ok) {
           const syncData = await syncRes.json();
-          html = syncData.cleanedHtml || syncData.html || "";
+          html = syncData.html || syncData.cleanedHtml || "";
         } else {
           // 2. Fallback via url-scraper também com renderização de navegador
           const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
@@ -74,7 +74,7 @@ export default {
             if (pollRes.ok) {
               const result = await pollRes.json();
               if (result.status === "completed") {
-                html = result.cleanedHtml || result.html || (result.data ? result.data.cleanedHtml || result.data.html : "");
+                html = result.html || result.cleanedHtml || (result.data ? result.data.html || result.data.cleanedHtml : "");
                 break;
               } else if (result.status === "failed") {
                 throw new Error("A raspagem falhou no servidor do Anakin.");
