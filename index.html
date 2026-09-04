@@ -389,82 +389,134 @@
         }
 
         function aplicarBateriasSincronizadas(baterias) {
-            const catHeats = currentEvent.heats[currentCategory];
-            
-            const getLastName = (name) => {
-                if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
-                const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-                const parts = clean.split(/\s+/);
-                return parts[parts.length - 1];
-            };
+			if (!baterias || baterias.length === 0) return;
 
-            let totalAtualizadas = 0;
-            let houveMudancaNestaRodada = true;
-            let pass = 0;
+			const catHeats = currentEvent.heats[currentCategory];
+			const isMasc = currentCategory === 'masculino';
+			const rounds = isMasc ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
 
-            while (houveMudancaNestaRodada && pass < 6) {
-                houveMudancaNestaRodada = false;
-                pass++;
+			// Coleta todas as baterias da estrutura em ordem sequencial
+			const flatSysHeats = [];
+			rounds.forEach(r => {
+				if (catHeats[r]) {
+					catHeats[r].forEach(h => flatSysHeats.push(h));
+				}
+			});
 
-                baterias.forEach(ext => {
-                    if (!ext.p1 || !ext.p2) return;
+			const getLastName = (name) => {
+				if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
+				const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+				const parts = clean.split(/\s+/);
+				return parts[parts.length - 1];
+			};
 
-                    const extLast1 = getLastName(ext.p1);
-                    const extLast2 = getLastName(ext.p2);
-                    const extWinnerLast = getLastName(ext.winner);
+			let totalAtualizadas = 0;
+			const isBracketEmpty = flatSysHeats.every(h => h.p1 === 'Aguardando...' && h.p2 === 'Aguardando...');
 
-                    if (!extLast1 || !extLast2) return;
+			// Caso 1: Chave completamente limpa — Mapeamento sequencial direto das 35 baterias
+			if (isBracketEmpty) {
+				const totalToFill = Math.min(baterias.length, flatSysHeats.length);
+				for (let idx = 0; idx < totalToFill; idx++) {
+					const ext = baterias[idx];
+					const sysHeat = flatSysHeats[idx];
 
-                    for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
-                        if (!catHeats[r]) continue;
+					sysHeat.p1 = ext.p1;
+					sysHeat.p2 = ext.p2;
 
-                        for (let i = 0; i < catHeats[r].length; i++) {
-                            let sysHeat = catHeats[r][i];
+					const extWinnerLast = getLastName(ext.winner);
+					if (extWinnerLast) {
+						if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+						else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+						else sysHeat.winner = ext.winner;
+					}
+					totalAtualizadas++;
+				}
+			} else {
+				// Caso 2: Chave com dados parciais — Busca por correspondência de sobrenome com propagação
+				let houveMudanca = true;
+				let pass = 0;
 
-                            const sysLast1 = getLastName(sysHeat.p1);
-                            const sysLast2 = getLastName(sysHeat.p2);
+				while (houveMudanca && pass < 6) {
+					houveMudanca = false;
+					pass++;
 
-                            const matchDirect = (sysLast1 && sysLast1 === extLast1) && (sysLast2 && sysLast2 === extLast2);
-                            const matchReverse = (sysLast1 && sysLast1 === extLast2) && (sysLast2 && sysLast2 === extLast1);
+					baterias.forEach(ext => {
+						if (!ext.p1 || !ext.p2) return;
 
-                            if (matchDirect || matchReverse) {
-                                if (extWinnerLast && !sysHeat.winner) {
-                                    if (sysLast1 === extWinnerLast) sysHeat.winner = sysHeat.p1;
-                                    else if (sysLast2 === extWinnerLast) sysHeat.winner = sysHeat.p2;
-                                    
-                                    houveMudancaNestaRodada = true;
-                                    totalAtualizadas++;
-                                }
-                                break;
-                            }
+						const extLast1 = getLastName(ext.p1);
+						const extLast2 = getLastName(ext.p2);
+						const extWinnerLast = getLastName(ext.winner);
 
-                            if ((sysLast1 && !sysLast2 && (sysLast1 === extLast1 || sysLast1 === extLast2)) ||
-                                (sysLast2 && !sysLast1 && (sysLast2 === extLast1 || sysLast2 === extLast2))) {
-                                
-                                if (!sysLast1) sysHeat.p1 = (sysLast2 === extLast1) ? ext.p2 : ext.p1;
-                                if (!sysLast2) sysHeat.p2 = (sysLast1 === extLast1) ? ext.p2 : ext.p1;
+						for (const r of rounds) {
+							if (!catHeats[r]) continue;
 
-                                if (extWinnerLast) {
-                                    if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
-                                    else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
-                                }
+							for (let i = 0; i < catHeats[r].length; i++) {
+								let sysHeat = catHeats[r][i];
 
-                                houveMudancaNestaRodada = true;
-                                totalAtualizadas++;
-                                break;
-                            }
-                        }
-                    }
-                });
+								const sysLast1 = getLastName(sysHeat.p1);
+								const sysLast2 = getLastName(sysHeat.p2);
 
-                recalculateCascades();
-            }
+								const matchDirect = (sysLast1 && sysLast1 === extLast1) && (sysLast2 && sysLast2 === extLast2);
+								const matchReverse = (sysLast1 && sysLast1 === extLast2) && (sysLast2 && sysLast2 === extLast1);
 
-            currentEvent.defined = true;
-            salvarPalpitesLocal();
-            renderBracket();
-            showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
-        }
+								if (matchDirect || matchReverse) {
+									if (extWinnerLast && !sysHeat.winner) {
+										if (sysLast1 === extWinnerLast) sysHeat.winner = sysHeat.p1;
+										else if (sysLast2 === extWinnerLast) sysHeat.winner = sysHeat.p2;
+										houveMudanca = true;
+										totalAtualizadas++;
+									}
+									break;
+								}
+
+								if ((sysLast1 && !sysLast2 && (sysLast1 === extLast1 || sysLast1 === extLast2)) ||
+									(sysLast2 && !sysLast1 && (sysLast2 === extLast1 || sysLast2 === extLast2))) {
+									
+									if (!sysLast1) sysHeat.p1 = (sysLast2 === extLast1) ? ext.p2 : ext.p1;
+									if (!sysLast2) sysHeat.p2 = (sysLast1 === extLast1) ? ext.p2 : ext.p1;
+
+									if (extWinnerLast) {
+										if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+										else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+									}
+
+									houveMudanca = true;
+									totalAtualizadas++;
+									break;
+								}
+							}
+						}
+					});
+					recalculateCascades();
+				}
+
+				// Fallback para preenchimento sequencial caso a correspondência de nomes não altere nada
+				if (totalAtualizadas === 0) {
+					const totalToFill = Math.min(baterias.length, flatSysHeats.length);
+					for (let idx = 0; idx < totalToFill; idx++) {
+						const ext = baterias[idx];
+						const sysHeat = flatSysHeats[idx];
+
+						sysHeat.p1 = ext.p1;
+						sysHeat.p2 = ext.p2;
+
+						const extWinnerLast = getLastName(ext.winner);
+						if (extWinnerLast) {
+							if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+							else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+							else sysHeat.winner = ext.winner;
+						}
+						totalAtualizadas++;
+					}
+				}
+			}
+
+			currentEvent.defined = true;
+			recalculateCascades();
+			salvarPalpitesLocal();
+			renderBracket();
+			showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
+		}
 
         function processarHTMLManual() {
             const html = document.getElementById('wsl-source').value;
