@@ -3,7 +3,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/api-wsl') {
-      let targetURL = url.searchParams.get('url') || 'https://www.worldsurfleague.com/events/2026/ct/442/fiji-pro/results';
+      let targetURL = url.searchParams.get('url') || 'https://www.worldsurfleague.com/events/2026/ct/438/rip-curl-pro-bells-beach/results';
 
       if (!targetURL.endsWith('/results') && !targetURL.includes('/results?')) {
         targetURL = targetURL.replace(/\/main\/?$/, '') + '/results';
@@ -64,35 +64,28 @@ export default {
           }
         };
 
-        // 1. Raspa a página principal do evento informado na requisição
         const mainContent = await scrapeSingleUrl(targetURL);
 
         if (!mainContent) {
           throw new Error("Não foi possível obter os dados da WSL no Anakin.");
         }
 
-        // 2. Extrai automaticamente todos os roundIds presentes no conteúdo raspado
-        const roundMatches = [...mainContent.matchAll(/roundId=(\d+)/g)];
-        const discoveredRoundIds = [...new Set(roundMatches.map(m => m[1]))];
+        const roundMatches = [...mainContent.matchAll(/(?:roundId|eventCatId)=(\d+)/g)];
+        let discoveredParams = [...new Set(roundMatches.map(m => m[0]))];
 
-        let extraContents = [];
-        if (discoveredRoundIds.length > 0) {
-          const baseUrl = targetURL.split('?')[0];
-          
-          // Cria URLs secundárias apenas para roundIds que ainda não estão na URL original
-          const extraUrls = discoveredRoundIds
-            .map(rid => `${baseUrl}?roundId=${rid}`)
-            .filter(u => u !== targetURL);
-
-          // Limita a no máximo 3 requisições paralelas para evitar estouro de tempo limite
-          const urlsToFetch = extraUrls.slice(0, 3);
-          extraContents = await Promise.all(urlsToFetch.map(u => scrapeSingleUrl(u)));
+        if (discoveredParams.length === 0) {
+          discoveredParams = ['eventCatId=1', 'eventCatId=2'];
         }
 
-        // 3. Consolida todo o texto raspado
+        const baseUrl = targetURL.split('?')[0];
+        const extraUrls = discoveredParams
+          .map(param => `${baseUrl}?${param}`)
+          .filter(u => u !== targetURL)
+          .slice(0, 4);
+
+        const extraContents = await Promise.all(extraUrls.map(u => scrapeSingleUrl(u)));
         const fullContent = [mainContent, ...extraContents].join("\n").trim();
 
-        // 4. Limpeza e extração por padrão de notas
         const cleanContent = fullContent
           .replace(/&nbsp;/g, ' ')
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
@@ -106,24 +99,35 @@ export default {
         
         const isBadName = (s) => {
           if (!s || s.length < 2 || s.length > 35 || /\d/.test(s)) return true;
-          const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro', 'event', 'product', 'attribute', 'value', 'description', 'image', 'tourism', 'airways', 'resort', 'island', 'surf', 'surfline', 'corona', 'cero'];
+          const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro', 'event', 'product', 'attribute', 'value', 'description', 'image', 'tourism', 'airways', 'resort', 'island', 'surf', 'surfline', 'corona', 'cero', 'status', 'rank'];
           const l = s.toLowerCase();
           return bad.some(b => l.includes(b));
         };
 
         const heatsFound = [];
+        let currentRound = 'r1';
 
         for (let i = 0; i < lines.length; i++) {
+          const lLower = lines[i].toLowerCase();
+
+          // Identificação dinâmica das rodadas no texto raspado
+          if (lLower.includes('opening round') || lLower.includes('round 1')) currentRound = 'r1';
+          else if (lLower.includes('elimination round') || lLower.includes('round 2')) currentRound = 'r2';
+          else if (lLower.includes('round of 32') || lLower.includes('round of 16') || lLower.includes('round 3')) currentRound = 'r3';
+          else if (lLower.includes('quarterfinal') || lLower.includes('quartas')) currentRound = 'qf';
+          else if (lLower.includes('semifinal') || lLower.includes('semis')) currentRound = 'sf';
+          else if (lLower === 'final' || lLower === 'finals') currentRound = 'final';
+
           if (isScore(lines[i])) {
             let p1 = null;
-            for (let b = 1; b <= 5 && (i - b) >= 0; b++) {
+            for (let b = 1; b <= 6 && (i - b) >= 0; b++) {
               if (!isBadName(lines[i - b])) {
                 p1 = lines[i - b];
                 break;
               }
             }
 
-            for (let f = 1; f <= 8 && (i + f) < lines.length; f++) {
+            for (let f = 1; f <= 10 && (i + f) < lines.length; f++) {
               if (isScore(lines[i + f])) {
                 let p2 = null;
                 for (let k = i + 1; k < i + f; k++) {
@@ -140,7 +144,7 @@ export default {
                   if (score1 > score2) winner = p1;
                   else if (score2 > score1) winner = p2;
 
-                  heatsFound.push({ p1, p2, score1, score2, winner });
+                  heatsFound.push({ p1, p2, score1, score2, winner, round: currentRound });
                   i = i + f;
                   break;
                 }
@@ -152,8 +156,8 @@ export default {
         const unicos = [];
         const keys = new Set();
         heatsFound.forEach(h => {
-          const k = `${h.p1}-${h.p2}`;
-          const kReverse = `${h.p2}-${h.p1}`;
+          const k = `${h.round}-${h.p1}-${h.p2}`;
+          const kReverse = `${h.round}-${h.p2}-${h.p1}`;
           if (!keys.has(k) && !keys.has(kReverse)) { 
             keys.add(k); 
             unicos.push(h); 
