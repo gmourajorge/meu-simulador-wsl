@@ -69,42 +69,67 @@ export default {
           throw new Error("Tempo limite excedido para obter a resposta.");
         }
 
-        // --- Varredor por Janela Dinâmica ---
+        // 1. Limpeza do texto bruto
         const cleanContent = content
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
           .replace(/<[^>]+>/g, '\n')
           .replace(/\r\n|\r/g, '\n');
 
-        const lines = cleanContent
-          .split('\n')
-          .map(l => l.trim())
-          .filter(l => l.length > 0 && !l.includes('http') && !/Make heat picks|\*Fan picks|Details|Replay|Watch/i.test(l));
+        const rawLines = cleanContent.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
+        // 2. Regras Rígidas de Validação
+        const isScore = (str) => {
+          if (!/^\d{1,2}\.\d{2}$/.test(str)) return false;
+          const val = parseFloat(str);
+          return val >= 0.0 && val <= 20.0;
+        };
+
+        const isSurferName = (str) => {
+          if (!str || str.length < 3 || str.length > 30) return false;
+          if (/\d/.test(str)) return false; // Nomes de surfistas NÃO possuem números (elimina "1 wave")
+          if (!/^[A-Za-zÀ-ÿ\.\s'-]+$/.test(str)) return false;
+
+          const blacklist = [
+            'wave', 'heat', 'round', 'replay', 'details', 'completed', 'make', 'pick', 
+            'picks', 'fan', 'show', 'results', 'result', 'watch', 'fiji', 'pro', 'clear', 
+            'apply', 'summary', 'product', 'attribute', 'value', 'description', 'image',
+            'tourism', 'airways', 'resort', 'island', 'surf', 'surfline', 'corona', 'cero'
+          ];
+          const lower = str.toLowerCase();
+          return !blacklist.some(word => lower.includes(word));
+        };
+
+        // 3. Filtragem Sequencial de Elementos Validos
+        const validTokens = [];
+        for (const line of rawLines) {
+          if (isScore(line)) {
+            validTokens.push({ type: 'score', value: parseFloat(line) });
+          } else if (isSurferName(line)) {
+            validTokens.push({ type: 'name', value: line });
+          }
+        }
+
+        // 4. Montagem das Baterias (Procura sequência: Nome1 -> Nota1 -> Nome2 -> Nota2)
         const heatsFound = [];
-        const isScore = (str) => /^[\d]{1,2}\.[\d]{2}$/.test(str);
-        const isName = (str) => str && str.length >= 3 && str.length <= 30 && !isScore(str);
+        for (let i = 0; i < validTokens.length - 3; i++) {
+          if (
+            validTokens[i].type === 'name' &&
+            validTokens[i+1].type === 'score' &&
+            validTokens[i+2].type === 'name' &&
+            validTokens[i+3].type === 'score'
+          ) {
+            const p1 = validTokens[i].value;
+            const score1 = validTokens[i+1].value;
+            const p2 = validTokens[i+2].value;
+            const score2 = validTokens[i+3].value;
 
-        for (let i = 0; i < lines.length - 1; i++) {
-          if (isScore(lines[i])) {
-            const score1 = parseFloat(lines[i]);
-            const p1 = lines[i - 1];
+            if (p1 !== p2) {
+              let winner = null;
+              if (score1 > score2) winner = p1;
+              else if (score2 > score1) winner = p2;
 
-            // Busca a segunda nota nas próximas 3 linhas
-            for (let j = i + 1; j <= i + 3 && j < lines.length; j++) {
-              if (isScore(lines[j])) {
-                const score2 = parseFloat(lines[j]);
-                const p2 = lines[j - 1];
-
-                if (isName(p1) && isName(p2) && p1 !== p2) {
-                  let winner = null;
-                  if (score1 > score2) winner = p1;
-                  else if (score2 > score1) winner = p2;
-
-                  heatsFound.push({ p1, p2, score1, score2, winner });
-                  i = j; // Avança o ponteiro para a próxima bateria
-                  break;
-                }
-              }
+              heatsFound.push({ p1, p2, score1, score2, winner });
+              i += 3; // Salta os 4 elementos processados
             }
           }
         }
@@ -119,8 +144,7 @@ export default {
         if (unicos.length === 0) {
           return new Response(JSON.stringify({
             sucesso: false,
-            mensagem: "Página carregada via Anakin, mas o padrão das baterias não foi identificado.",
-            debugSample: lines.slice(0, 30).join(" | ") // Retorna as primeiras 30 linhas para diagnóstico
+            mensagem: "Página carregada via Anakin, mas o padrão das baterias não foi identificado."
           }), { headers: corsHeaders });
         }
 
