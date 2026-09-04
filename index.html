@@ -356,6 +356,58 @@
         }
 
         function aplicarBateriasSincronizadas(baterias) {
+			const catHeats = currentEvent.heats[currentCategory];
+			
+			// Extrai o último nome e limpa acentos
+			const getLastName = (name) => {
+				if (!name) return '';
+				const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+				const parts = clean.split(/\s+/);
+				return parts[parts.length - 1]; // Pega a última palavra (sobrenome)
+			};
+
+			let atualizadas = 0;
+
+			baterias.forEach(ext => {
+				if (!ext.p1 || !ext.p2) return;
+				let atualizouExistente = false;
+
+				const extLastName1 = getLastName(ext.p1);
+				const extLastName2 = getLastName(ext.p2);
+				const extWinnerLastName = getLastName(ext.winner);
+
+				for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
+					if (!catHeats[r]) continue;
+					for (let i = 0; i < catHeats[r].length; i++) {
+						let sysHeat = catHeats[r][i];
+						if (sysHeat.p1 === 'Aguardando...' && sysHeat.p2 === 'Aguardando...') continue;
+
+						const sysLastName1 = getLastName(sysHeat.p1);
+						const sysLastName2 = getLastName(sysHeat.p2);
+
+						// Compara os sobrenomes em ambas as ordens
+						const matchDirect = (sysLastName1 === extLastName1 && sysLastName2 === extLastName2);
+						const matchReverse = (sysLastName1 === extLastName2 && sysLastName2 === extLastName1);
+
+						if (matchDirect || matchReverse) {
+							if (extWinnerLastName) {
+								if (sysLastName1 === extWinnerLastName) sysHeat.winner = sysHeat.p1;
+								else if (sysLastName2 === extWinnerLastName) sysHeat.winner = sysHeat.p2;
+							}
+							atualizouExistente = true;
+							atualizadas++;
+							break;
+						}
+					}
+					if (atualizouExistente) break;
+				}
+			});
+
+			currentEvent.defined = true;
+			recalculateCascades();
+			renderBracket();
+			showToast(`✅ ${atualizadas} baterias atualizadas com sucesso!`);
+		}
             const catHeats = currentEvent.heats[currentCategory];
             const norm = (n) => n ? n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : '';
             let atualizadas = 0;

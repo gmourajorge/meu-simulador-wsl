@@ -25,107 +25,47 @@ export default {
           "Content-Type": "application/json"
         };
 
-        let html = "";
-
-        // 1. Tenta requisição síncrona com renderização de navegador ativa
         const syncRes = await fetch("https://api.anakin.io/v1/scrape", {
           method: "POST",
           headers,
           body: JSON.stringify({
             url: targetURL,
-            useBrowser: true, // Ativa a execução de JavaScript (React)
-            formats: ["html", "cleanedHtml"]
+            useBrowser: true,
+            formats: ["markdown", "html"]
           })
         });
 
-        if (syncRes.ok) {
-          const syncData = await syncRes.json();
-          html = syncData.html || syncData.cleanedHtml || "";
-        } else {
-          // 2. Fallback via url-scraper também com renderização de navegador
-          const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              url: targetURL,
-              country: "us",
-              useBrowser: true, // Ativa a execução de JavaScript
-              formats: ["html", "cleanedHtml"]
-            })
-          });
-
-          if (!submitRes.ok) {
-            throw new Error(`Erro no servidor Anakin: Status ${submitRes.status}`);
-          }
-
-          const jobData = await submitRes.json();
-          const jobId = jobData.jobId || jobData.id;
-
-          if (!jobId) {
-            throw new Error("Não foi possível obter o ID da tarefa no Anakin.");
-          }
-
-          let attempts = 0;
-          while (attempts < 20) {
-            await new Promise(r => setTimeout(r, 1000));
-            attempts++;
-
-            const pollRes = await fetch(`https://api.anakin.io/v1/url-scraper/${jobId}`, { headers });
-            if (pollRes.ok) {
-              const result = await pollRes.json();
-              if (result.status === "completed") {
-                html = result.html || result.cleanedHtml || (result.data ? result.data.html || result.data.cleanedHtml : "");
-                break;
-              } else if (result.status === "failed") {
-                throw new Error("A raspagem falhou no servidor do Anakin.");
-              }
-            }
-          }
+        if (!syncRes.ok) {
+          throw new Error(`Erro no servidor Anakin: Status ${syncRes.status}`);
         }
 
-        if (!html) {
-          throw new Error("Não foi possível obter o HTML da página após a raspagem.");
+        const syncData = await syncRes.json();
+        const content = syncData.markdown || syncData.html || "";
+
+        if (!content) {
+          throw new Error("Página retornou vazia do Anakin.");
         }
 
-        // --- Leitura das Baterias ---
-        const clean = html.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
         const heatsFound = [];
 
-        function traverse(obj) {
-          if (!obj || typeof obj !== 'object') return;
-          if (Array.isArray(obj)) return obj.forEach(traverse);
+        // Regex para capturar pares de atletas com notas (ex: C. Houshmand 16.87 G. Medina 15.17)
+        const heatRegex = /([A-Z]\.\s+[A-Za-z'-]+)\s+([\d.]+)\s+([A-Z]\.\s+[A-Za-z'-]+)\s+([\d.]+)/g;
+        let match;
 
-          const athletes = obj.athletes || obj.participants || obj.surfers;
-          if (Array.isArray(athletes) && athletes.length >= 2) {
-            const p1 = athletes[0]?.name || `${athletes[0]?.firstName || ''} ${athletes[0]?.lastName || ''}`.trim();
-            const p2 = athletes[1]?.name || `${athletes[1]?.firstName || ''} ${athletes[1]?.lastName || ''}`.trim();
+        while ((match = heatRegex.exec(content)) !== null) {
+          const p1 = match[1].trim();
+          const score1 = parseFloat(match[2]);
+          const p2 = match[3].trim();
+          const score2 = parseFloat(match[4]);
 
-            if (p1 && p2 && p1 !== p2 && !p1.toLowerCase().includes('tbd')) {
-              let winner = null;
-              const wId = obj.winnerAthleteId || obj.winnerId || obj.winner;
-              if (wId === athletes[0]?.id || wId === p1) winner = p1;
-              else if (wId === athletes[1]?.id || wId === p2) winner = p2;
-              heatsFound.push({ p1, p2, winner: winner || null });
-            }
-          }
-          Object.values(obj).forEach(val => typeof val === 'object' && val !== null && traverse(val));
+          let winner = null;
+          if (score1 > score2) winner = p1;
+          else if (score2 > score1) winner = p2;
+
+          heatsFound.push({ p1, p2, score1, score2, winner });
         }
 
-        const match = clean.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
-        if (match) {
-          try { traverse(JSON.parse(match[1])); } catch(e) {}
-        }
-
-        if (heatsFound.length === 0) {
-          const jsonBlocks = clean.match(/\{"props":[\s\S]*?\}\}\}/g) || clean.match(/\{"pageProps":[\s\S]*?\}\}/g) || [];
-          for (const block of jsonBlocks) {
-            try {
-              traverse(JSON.parse(block));
-              if (heatsFound.length > 0) break;
-            } catch(e) {}
-          }
-        }
-
+        // Remoção de duplicados
         const unicos = [];
         const keys = new Set();
         heatsFound.forEach(h => {
@@ -136,7 +76,7 @@ export default {
         if (unicos.length === 0) {
           return new Response(JSON.stringify({
             sucesso: false,
-            mensagem: "Página carregada via Anakin, mas os dados das baterias não foram encontrados no HTML."
+            mensagem: "Página carregada, mas o padrão das baterias não foi identificado no texto."
           }), { headers: corsHeaders });
         }
 
