@@ -360,75 +360,75 @@
 				return parts[parts.length - 1];
 			};
 
-			let atualizadas = 0;
+			let totalAtualizadas = 0;
+			let houveMudancaNestaRodada = true;
+			let pass = 0;
 
-			baterias.forEach(ext => {
-				if (!ext.p1 || !ext.p2) return;
-				let atualizou = false;
+			// Loop de Cascata: Roda até 6 vezes propagando vencedores para abrir as vagas seguintes
+			while (houveMudancaNestaRodada && pass < 6) {
+				houveMudancaNestaRodada = false;
+				pass++;
 
-				const extLast1 = getLastName(ext.p1);
-				const extLast2 = getLastName(ext.p2);
-				const extWinnerLast = getLastName(ext.winner);
+				baterias.forEach(ext => {
+					if (!ext.p1 || !ext.p2) return;
 
-				if (!extLast1 || !extLast2) return;
+					const extLast1 = getLastName(ext.p1);
+					const extLast2 = getLastName(ext.p2);
+					const extWinnerLast = getLastName(ext.winner);
 
-				for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
-					if (!catHeats[r]) continue;
+					if (!extLast1 || !extLast2) return;
 
-					for (let i = 0; i < catHeats[r].length; i++) {
-						let sysHeat = catHeats[r][i];
+					for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
+						if (!catHeats[r]) continue;
 
-						const sysLast1 = getLastName(sysHeat.p1);
-						const sysLast2 = getLastName(sysHeat.p2);
+						for (let i = 0; i < catHeats[r].length; i++) {
+							let sysHeat = catHeats[r][i];
 
-						const matchDirect = (sysLast1 && sysLast1 === extLast1) && (sysLast2 && sysLast2 === extLast2);
-						const matchReverse = (sysLast1 && sysLast1 === extLast2) && (sysLast2 && sysLast2 === extLast1);
+							const sysLast1 = getLastName(sysHeat.p1);
+							const sysLast2 = getLastName(sysHeat.p2);
 
-						// Caso 1: Ambos os surfistas batem com a bateria cadastrada
-						if (matchDirect || matchReverse) {
-							if (extWinnerLast) {
-								if (sysLast1 === extWinnerLast) sysHeat.winner = sysHeat.p1;
-								else if (sysLast2 === extWinnerLast) sysHeat.winner = sysHeat.p2;
+							const matchDirect = (sysLast1 && sysLast1 === extLast1) && (sysLast2 && sysLast2 === extLast2);
+							const matchReverse = (sysLast1 && sysLast1 === extLast2) && (sysLast2 && sysLast2 === extLast1);
+
+							// Casamento perfeito de ambos os atletas na bateria
+							if (matchDirect || matchReverse) {
+								if (extWinnerLast && !sysHeat.winner) {
+									if (sysLast1 === extWinnerLast) sysHeat.winner = sysHeat.p1;
+									else if (sysLast2 === extWinnerLast) sysHeat.winner = sysHeat.p2;
+									
+									houveMudancaNestaRodada = true;
+									totalAtualizadas++;
+								}
+								break;
 							}
-							atualizou = true;
-							atualizadas++;
-							break;
-						}
 
-						// Caso 2: Um surfista bate e o outro era "Aguardando..." (preenchendo vagas de próximas fases)
-						const p1Waiting = !sysLast1;
-						const p2Waiting = !sysLast2;
+							// Preenchimento de vaga pendente (Aguardando...)
+							if ((sysLast1 && !sysLast2 && (sysLast1 === extLast1 || sysLast1 === extLast2)) ||
+								(sysLast2 && !sysLast1 && (sysLast2 === extLast1 || sysLast2 === extLast2))) {
+								
+								if (!sysLast1) sysHeat.p1 = (sysLast2 === extLast1) ? ext.p2 : ext.p1;
+								if (!sysLast2) sysHeat.p2 = (sysLast1 === extLast1) ? ext.p2 : ext.p1;
 
-						if (sysLast1 && p2Waiting && (sysLast1 === extLast1 || sysLast1 === extLast2)) {
-							sysHeat.p2 = (sysLast1 === extLast1) ? ext.p2 : ext.p1;
-							if (extWinnerLast) {
-								if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
-								else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+								if (extWinnerLast) {
+									if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+									else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+								}
+
+								houveMudancaNestaRodada = true;
+								totalAtualizadas++;
+								break;
 							}
-							atualizou = true;
-							atualizadas++;
-							break;
-						}
-
-						if (sysLast2 && p1Waiting && (sysLast2 === extLast1 || sysLast2 === extLast2)) {
-							sysHeat.p1 = (sysLast2 === extLast1) ? ext.p1 : ext.p2;
-							if (extWinnerLast) {
-								if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
-								else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
-							}
-							atualizou = true;
-							atualizadas++;
-							break;
 						}
 					}
-					if (atualizou) break;
-				}
-			});
+				});
+
+				// Atualiza a árvore e recalcula os vencedores promovidos para a próxima fase
+				recalculateCascades();
+			}
 
 			currentEvent.defined = true;
-			recalculateCascades();
 			renderBracket();
-			showToast(`✅ ${atualizadas} baterias atualizadas com sucesso!`);
+			showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
 		}
 
         function processarHTMLManual() {
