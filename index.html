@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>WSL 2026 - Simulador Pro Avançado</title>
     <style>
         :root {
@@ -17,342 +17,667 @@
             --wsl-red: #ef4444;
             --wsl-text-dark: #0f172a;
             --wsl-text-muted: #64748b;
-            --wsl-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --wsl-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             --line-color: #94a3b8;
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--wsl-font); }
-        body { height: 100vh; overflow: hidden; background: var(--wsl-bg); color: var(--wsl-text-dark); display: flex; flex-direction: column; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--wsl-font); -webkit-tap-highlight-color: transparent; }
 
-        .wsl-header { background: #0c1017; color: #fff; padding: 0 16px; height: 48px; display: flex; align-items: center; justify-content: space-between; }
-        .wsl-brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 0.85rem; }
-        .wsl-logo { background: var(--wsl-accent); padding: 2px 6px; border-radius: 4px; }
+        html, body { height: 100%; height: 100dvh; overflow: hidden; background-color: var(--wsl-bg); color: var(--wsl-text-dark); display: flex; flex-direction: column; }
 
-        .wsl-subnav { background: #fff; border-bottom: 1px solid var(--wsl-border-light); padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-        .controls-group, .actions-group { display: flex; align-items: center; gap: 8px; }
-        select { background: #f8fafc; border: 1px solid var(--wsl-border); padding: 5px 8px; border-radius: 4px; font-weight: 600; font-size: 0.8rem; }
+        ::-webkit-scrollbar { height: 8px; width: 8px; }
+        ::-webkit-scrollbar-track { background: #e2e8f0; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        .wsl-header { background-color: #0c1017; color: #fff; padding: 0 16px; height: 48px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; z-index: 10; }
+        .wsl-brand { display: flex; align-items: center; gap: 8px; }
+        .wsl-logo { background: var(--wsl-accent); color: #fff; font-weight: 900; font-size: 0.85rem; padding: 2px 6px; border-radius: 4px; letter-spacing: 1px; }
+        .wsl-title { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .wsl-subnav { background-color: #ffffff; border-bottom: 1px solid var(--wsl-border-light); padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); z-index: 10; }
+        .controls-group, .actions-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .event-selector label { font-size: 0.7rem; text-transform: uppercase; color: var(--wsl-text-muted); font-weight: 700; margin-right: 4px; }
+        select { background: #f8fafc; color: var(--wsl-text-dark); border: 1px solid var(--wsl-border); padding: 5px 8px; border-radius: 4px; font-size: 0.8rem; outline: none; font-weight: 600; cursor: pointer; }
         
         .category-tabs { display: flex; background: #e2e8f0; padding: 2px; border-radius: 5px; }
-        .tab-btn { background: transparent; color: var(--wsl-text-muted); border: none; padding: 5px 12px; border-radius: 3px; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
+        .tab-btn { background: transparent; color: var(--wsl-text-muted); border: none; padding: 5px 12px; border-radius: 3px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
         .tab-btn.active { background: var(--wsl-accent); color: #fff; }
 
-        .btn-sync { background: rgba(2, 132, 199, 0.1); color: var(--wsl-accent); border: 1px solid rgba(2, 132, 199, 0.3); padding: 5px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
-        .btn-reset { background: rgba(239, 68, 68, 0.1); color: var(--wsl-red); border: 1px solid rgba(239, 68, 68, 0.3); padding: 5px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+        .btn-sync-wsl { background: rgba(2, 132, 199, 0.08); color: var(--wsl-accent); border: 1px solid rgba(2, 132, 199, 0.3); padding: 5px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+        .btn-sync-wsl:hover { background: var(--wsl-accent); color: #fff; }
+        .btn-reset-all { background: rgba(239, 68, 68, 0.08); color: var(--wsl-red); border: 1px solid rgba(239, 68, 68, 0.3); padding: 5px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; cursor: pointer; text-transform: uppercase; }
+        .btn-reset-all:hover { background: var(--wsl-red); color: #fff; }
 
-        .event-details { padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--wsl-border-light); }
-        .event-details h2 { font-size: 0.95rem; font-weight: 800; text-transform: uppercase; }
-        .event-details p { font-size: 0.72rem; color: var(--wsl-text-muted); }
+        .sync-icon { width: 14px; height: 14px; display: inline-block; flex-shrink: 0; }
 
-        .bracket-outer-wrapper { flex: 1; overflow: auto; padding: 40px 24px; position: relative; }
-        .bracket-viewport { display: flex; gap: 40px; margin: 0 auto; width: fit-content; align-items: stretch; position: relative; }
+        .event-details { padding: 8px 12px; background: #ffffff; border-bottom: 1px solid var(--wsl-border-light); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 10; }
+        .event-meta h2 { font-size: 1rem; font-weight: 800; text-transform: uppercase; color: var(--wsl-text-dark); }
+        .event-meta p { font-size: 0.72rem; color: var(--wsl-text-muted); margin-top: 1px; }
 
-        #svg-lines-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .manual-sync-box { display: none; padding: 15px; background: #f8fafc; border-bottom: 1px solid var(--wsl-border-light); flex-shrink: 0; box-shadow: inset 0 -2px 5px rgba(0,0,0,0.02); }
+        .manual-sync-box.active { display: block; animation: slideDown 0.3s ease; }
+        .manual-sync-box h4 { font-size: 0.85rem; color: var(--wsl-accent); margin-bottom: 8px; text-transform: uppercase; font-weight: 800; }
+        .manual-sync-box p { font-size: 0.75rem; color: var(--wsl-text-muted); line-height: 1.4; margin-bottom: 10px; }
+        .manual-sync-box textarea { width: 100%; padding: 8px; font-family: monospace; font-size: 11px; border: 1px solid var(--wsl-border); border-radius: 4px; margin-bottom: 10px; resize: vertical; outline: none; }
+        .manual-sync-box textarea:focus { border-color: var(--wsl-accent); }
+        .btn-extract { background: var(--wsl-green); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; cursor: pointer; text-transform: uppercase; }
+        .btn-extract:hover { background: #059669; }
+        .btn-cancel { background: transparent; color: var(--wsl-text-muted); border: 1px solid var(--wsl-border); padding: 6px 12px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; cursor: pointer; text-transform: uppercase; margin-left: 8px; }
+        .btn-cancel:hover { background: #e2e8f0; }
 
-        .side-bracket { display: flex; gap: 40px; }
-        .center-bracket { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 220px; }
-        .round-column { width: 200px; display: flex; flex-direction: column; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .toast-notification { position: fixed; bottom: 20px; right: 20px; left: 20px; max-width: 400px; margin: 0 auto; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.25); opacity: 0; pointer-events: none; transition: opacity 0.3s ease, transform 0.3s ease; transform: translateY(10px); z-index: 1000; text-align: center; }
+        .toast-notification.show { opacity: 1; transform: translateY(0); }
+
+        .bracket-outer-wrapper { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 40px 24px 100px 24px; position: relative; }
+        .bracket-viewport { display: flex; gap: 40px; margin: 0 auto; width: fit-content; min-width: max-content; align-items: stretch; position: relative; }
+
+        #svg-lines-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+
+        .side-bracket { display: flex; gap: 40px; align-items: stretch; position: relative; z-index: 2; }
+        .center-bracket { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 220px; position: relative; z-index: 2; }
+
+        .round-column { width: 200px; display: flex; flex-direction: column; align-items: stretch; }
         
-        .round-header { text-align: center; font-size: 0.7rem; font-weight: 800; color: var(--wsl-text-muted); text-transform: uppercase; padding: 4px; background: #e2e8f0; border-radius: 4px; margin-bottom: 12px; }
+        .round-header-floating { position: absolute; bottom: 100%; left: 0; right: 0; text-align: center; font-size: 0.7rem; font-weight: 800; color: var(--wsl-text-muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 5px 4px; background: #e2e8f0; border-radius: 4px; margin-bottom: 8px; pointer-events: none; z-index: 10; }
 
-        .heats-container { display: grid; grid-template-rows: repeat(8, 1fr); flex: 1; }
-        .heat-node { display: flex; align-items: center; justify-content: center; width: 100%; }
-        .heat-card-wrapper { width: 100%; padding: 4px 0; }
+        .heats-container { display: grid; grid-template-rows: repeat(8, 1fr); flex: 1; gap: 0; position: relative; }
+        .heat-node { display: flex; align-items: center; justify-content: center; position: relative; width: 100%; }
+        .heat-card-wrapper { width: 100%; padding: 5px 0; position: relative; z-index: 2; }
 
-        .heat-card { background: var(--wsl-card-bg); border: 1px solid var(--wsl-border-light); border-radius: 6px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
-        .heat-title { background: #f1f5f9; font-size: 0.65rem; font-weight: 800; color: var(--wsl-text-muted); padding: 4px 8px; display: flex; justify-content: space-between; }
+        .heat-card { background: var(--wsl-card-bg); border: 1px solid var(--wsl-border-light); border-radius: 6px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); width: 100%; }
+        .heat-title { background: #f1f5f9; font-size: 0.65rem; font-weight: 800; color: var(--wsl-text-muted); padding: 6px 10px; border-bottom: 1px solid var(--wsl-border-light); text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+        .heat-card.final-card .heat-title { background: var(--wsl-gold); color: #0f172a; font-weight: 900; }
         
-        .surfer-slot { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-bottom: 1px solid var(--wsl-border-light); cursor: pointer; }
+        .btn-reset-heat { background: transparent; border: none; color: var(--wsl-text-muted); cursor: pointer; font-size: 0.8rem; line-height: 1; }
+        .btn-reset-heat:hover { color: var(--wsl-red); }
+
+        .surfer-slot { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--wsl-border-light); cursor: pointer; border-left: 4px solid transparent; gap: 8px; }
         .surfer-slot:last-child { border-bottom: none; }
-        .surfer-slot.winner { background: rgba(16, 185, 129, 0.08); border-left: 3px solid var(--wsl-green); }
-        .surfer-name { font-size: 0.78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .surfer-slot:not(.disabled):hover { background: var(--wsl-card-hover); }
+        .surfer-slot.disabled { opacity: 0.45; cursor: not-allowed; }
+        .surfer-slot.winner { background: rgba(16, 185, 129, 0.08); border-left-color: var(--wsl-green); }
 
-        .toast { position: fixed; bottom: 20px; right: 20px; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; opacity: 0; pointer-events: none; transition: 0.3s ease; }
-        .toast.show { opacity: 1; }
+        .surfer-info-group { display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1; min-width: 0; }
+        .surfer-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800; flex-shrink: 0; }
+        .surfer-avatar.initials { background-color: var(--wsl-accent); color: #ffffff; }
+        .surfer-avatar.placeholder { background-color: #cbd5e1; color: #64748b; }
+        
+        .surfer-name { font-size: 0.8rem; font-weight: 600; color: var(--wsl-text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+        .surfer-slot.winner .surfer-name { font-weight: 800; color: #047857; }
+
+        .status-badge { font-size: 0.65rem; font-weight: 700; padding: 3px 6px; border-radius: 3px; background: #e2e8f0; color: var(--wsl-text-muted); flex-shrink: 0; }
+        .surfer-slot.winner .status-badge { background: var(--wsl-green); color: #ffffff; }
+
+        .champion-card { background: linear-gradient(180deg, #fef3c7 0%, #ffffff 100%); border: 2px solid var(--wsl-gold); border-radius: 8px; text-align: center; padding: 16px; width: 100%; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15); margin-top: 24px; }
+        .champion-card h3 { color: #b45309; font-size: 1rem; font-weight: 800; text-transform: uppercase; margin-top: 4px; }
+        
+        svg path { fill: none; stroke: var(--line-color); stroke-width: 2px; stroke-linejoin: round; }
     </style>
 </head>
 <body>
 
     <header class="wsl-header">
-        <div class="wsl-brand"><span class="wsl-logo">WSL</span> CT 2026 Simulator</div>
+        <div class="wsl-brand">
+            <span class="wsl-logo">WSL</span>
+            <span class="wsl-title">Championship Tour 2026 (Pro Render)</span>
+        </div>
     </header>
 
     <nav class="wsl-subnav">
         <div class="controls-group">
-            <select id="eventSelect"></select>
+            <div class="event-selector">
+                <label>Etapa:</label>
+                <select id="eventSelect"></select>
+            </div>
             <div class="category-tabs">
-                <button class="tab-btn active" id="btnMasc">Masc</button>
-                <button class="tab-btn" id="btnFem">Fem</button>
+                <button type="button" class="tab-btn active" id="btnMasc">Masc</button>
+                <button type="button" class="tab-btn" id="btnFem">Fem</button>
             </div>
         </div>
         <div class="actions-group">
-            <button class="btn-sync" id="btnSync">Sincronizar WSL</button>
-            <button class="btn-reset" id="btnReset">↺ Resetar</button>
+            <button type="button" class="btn-sync-wsl" id="btnSyncWSL" title="Baixar dados e resultados reais da WSL via Anakin">
+                <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25"/>
+                    <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-linecap="round"/>
+                </svg>
+                Sincronizar WSL
+            </button>
+            <button type="button" class="btn-reset-all" id="btnResetAll">↺ Limpar Chave</button>
         </div>
     </nav>
 
     <section class="event-details" id="eventBanner"></section>
 
-    <main class="bracket-outer-wrapper">
+    <section class="manual-sync-box" id="manualSyncBox">
+        <h4>Sincronização Manual (Fallback)</h4>
+        <p>1. <a href="#" id="wsl-link" target="_blank" style="color: var(--wsl-accent); font-weight: bold;">Clique aqui para abrir a página da WSL</a> e aperte <b>Ctrl+U</b>.<br>
+           2. Aperte <b>Ctrl+A</b> para selecionar tudo e <b>Ctrl+C</b> para copiar.<br>
+           3. Cole o código na caixa abaixo e clique em Extrair.</p>
+        <textarea id="wsl-source" rows="4" placeholder="Cole o código-fonte HTML aqui..."></textarea>
+        <div>
+            <button class="btn-extract" onclick="processarHTMLManual()">Extrair Baterias</button>
+            <button class="btn-cancel" onclick="document.getElementById('manualSyncBox').classList.remove('active')">Cancelar</button>
+        </div>
+    </section>
+
+    <main class="bracket-outer-wrapper" id="scrollWrapper">
         <div class="bracket-viewport" id="bracketContainer"></div>
     </main>
 
-    <div id="toast" class="toast"></div>
+    <div id="toastNotification" class="toast-notification"></div>
 
     <script>
-        // ESTADO GLOBAL DA APLICAÇÃO (STORE)
-        const Store = {
-            events: [
-                { id: "bells-2026", url: "https://www.worldsurfleague.com/events/2026/ct/438/rip-curl-pro-bells-beach/results", name: "1. Rip Curl Pro Bells Beach", loc: "Bells Beach, Austrália", dates: "01 - 11 Abr, 2026" },
-                { id: "margaret-2026", url: "https://www.worldsurfleague.com/events/2026/ct/439/western-australia-margaret-river-pro/results", name: "2. Margaret River Pro", loc: "Margaret River, Austrália", dates: "16 - 26 Abr, 2026" },
-                { id: "gold-coast-2026", url: "https://www.worldsurfleague.com/events/2026/ct/440/bonsoy-gold-coast-pro/results", name: "3. Gold Coast Pro", loc: "Snapper Rocks, Austrália", dates: "01 - 11 Mai, 2026" },
-                { id: "el-salvador-2026", url: "https://www.worldsurfleague.com/events/2026/ct/442/surf-city-el-salvador-pro/results", name: "4. Surf City El Salvador Pro", loc: "Punta Roca, El Salvador", dates: "05 - 15 Jun, 2026" },
-                { id: "rio-2026", url: "https://www.worldsurfleague.com/events/2026/ct/443/vivo-rio-pro/results", name: "5. VIVO Rio Pro", loc: "Saquarema, Brasil", dates: "19 - 27 Jun, 2026" },
-                { id: "tahiti-2026", url: "https://www.worldsurfleague.com/events/2026/ct/444/outerknown-tahiti-pro/results", name: "6. Outerknown Tahiti Pro", loc: "Teahupo'o, Taiti", dates: "08 - 18 Ago, 2026" },
-                { id: "fiji-2026", url: "https://www.worldsurfleague.com/events/2026/ct/445/fiji-pro/results", name: "7. Corona Fiji Pro", loc: "Cloudbreak, Fiji", dates: "25 Ago - 04 Set, 2026" }
-            ],
-            currentEventId: "bells-2026",
-            category: "masculino",
-            stateData: {}
-        };
+        function escapeHTML(str) { return !str ? '' : str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
-        function createEmptyBracket() {
-            const makeHeats = count => Array.from({ length: count }, (_, i) => ({ id: i + 1, p1: 'Aguardando...', p2: 'Aguardando...', winner: null }));
-            return {
-                masculino: { r1: makeHeats(4), r2: makeHeats(16), r3: makeHeats(8), qf: makeHeats(4), sf: makeHeats(2), final: makeHeats(1), champion: null },
-                feminino: { r1: makeHeats(8), r2: makeHeats(8), qf: makeHeats(4), sf: makeHeats(2), final: makeHeats(1), champion: null }
-            };
-        }
-
-        // GERENCIADOR DE CACHE
-        function saveState() {
-            localStorage.setItem(`wsl_sim_${Store.currentEventId}`, JSON.stringify(Store.stateData[Store.currentEventId]));
-        }
-
-        function loadState() {
-            const saved = localStorage.getItem(`wsl_sim_${Store.currentEventId}`);
-            if (saved) {
-                try {
-                    Store.stateData[Store.currentEventId] = JSON.parse(saved);
-                    return true;
-                } catch(e) {}
+        function getSurferAvatarHTML(name) {
+            if (!name || name.includes('Vencedor') || name.includes('Vencedora') || name === 'Aguardando...') {
+                return `<div class="surfer-avatar placeholder"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="#64748b" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>`;
             }
-            Store.stateData[Store.currentEventId] = createEmptyBracket();
+            const p = name.trim().split(' ');
+            return `<div class="surfer-avatar initials">${escapeHTML((p[0][0] + (p.length > 1 ? p[p.length-1][0] : '')).toUpperCase())}</div>`;
+        }
+
+        function createEmptyHeats(count) {
+            return Array.from({ length: count }, (_, i) => ({ id: `h${i + 1}`, p1: 'Aguardando...', p2: 'Aguardando...', winner: null }));
+        }
+
+        const wslEvents = [
+            {
+                id: "bells-2026",
+                wslUrl: "https://www.worldsurfleague.com/events/2026/ct/438/rip-curl-pro-bells-beach/results",
+                name: "1. Rip Curl Pro Bells Beach",
+                location: "Bells Beach, Austrália",
+                dates: "01 - 11 Abr, 2026",
+                heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
+            },
+            {
+                id: "margaret-2026",
+                wslUrl: "https://www.worldsurfleague.com/events/2026/ct/439/western-australia-margaret-river-pro/results",
+                name: "2. Margaret River Pro",
+                location: "Margaret River, Austrália",
+                dates: "16 - 26 Abr, 2026",
+                heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
+            },
+            {
+                id: "gold-coast-2026",
+                wslUrl: "https://www.worldsurfleague.com/events/2026/ct/440/bonsoy-gold-coast-pro/results",
+                name: "3. Bonsoy Gold Coast Pro",
+                location: "Snapper Rocks, Austrália",
+                dates: "01 - 11 Mai, 2026",
+                heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
+            },
+            {
+                id: "el-salvador-2026",
+                wslUrl: "https://www.worldsurfleague.com/events/2026/ct/442/surf-city-el-salvador-pro/results",
+                name: "4. Surf City El Salvador Pro",
+                location: "Punta Roca, El Salvador",
+                dates: "05 - 15 Jun, 2026",
+                heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
+            },
+            {
+                id: "rio-2026",
+                wslUrl: "https://www.worldsurfleague.com/events/2026/ct/443/vivo-rio-pro/results",
+                name: "5. VIVO Rio Pro",
+                location: "Saquarema, Brasil",
+                dates: "19 - 27 Jun, 2026",
+                heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
+            },
+            {
+                id: "tahiti-2026",
+                wslUrl: "https://www.worldsurfleague.com/events/2026/ct/444/outerknown-tahiti-pro/results",
+                name: "6. Outerknown Tahiti Pro",
+                location: "Teahupo'o, Taiti",
+                dates: "08 - 18 Ago, 2026",
+                heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
+            },
+            {
+                id: "fiji-2026",
+                wslUrl: "https://www.worldsurfleague.com/events/2026/ct/445/fiji-pro/results",
+                name: "7. Corona Fiji Pro",
+                location: "Cloudbreak, Fiji",
+                dates: "25 Ago - 04 Set, 2026",
+                heats: { masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }, feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null } }
+            }
+        ];
+
+        let currentEvent = wslEvents[0];
+        let currentCategory = 'masculino';
+        let globalLinksToDraw = [];
+
+        function salvarPalpitesLocal() {
+            if (!currentEvent) return;
+            const cacheKey = `wsl_picks_2026_${currentEvent.id}`;
+            localStorage.setItem(cacheKey, JSON.stringify(currentEvent.heats));
+        }
+
+        function carregarPalpitesLocais() {
+            if (!currentEvent) return false;
+            const cacheKey = `wsl_picks_2026_${currentEvent.id}`;
+            const savedData = localStorage.getItem(cacheKey);
+            if (savedData) {
+                try {
+                    currentEvent.heats = JSON.parse(savedData);
+                    currentEvent.defined = true;
+                    return true;
+                } catch (e) {
+                    console.error("Erro ao ler cache local:", e);
+                }
+            }
             return false;
         }
 
-        // MOTOR DE CASCATA E PROPAGAÇÃO IMUTÁVEL
-        function propagateCascades() {
-            const data = Store.stateData[Store.currentEventId][Store.category];
-            const getLastName = name => {
-                if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
-                const parts = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().split(/\s+/);
-                return parts[parts.length - 1];
-            };
+        async function initApp() {
+            populateSelect();
+            const possuiCache = carregarPalpitesLocais();
+            recalculateCascades();
+            renderBanner();
+            renderBracket();
+            window.addEventListener('resize', () => requestAnimationFrame(drawSVGLines));
 
-            // Propaga R1 para R2
-            if (data.r1) {
-                data.r1.forEach((h, i) => {
-                    const w = h.winner;
-                    const targetIdx = Store.category === 'masculino' ? [8, 5, 2, 12][i] : [4, 0, 2, 6, 1, 7, 3, 5][i];
-                    if (data.r2 && data.r2[targetIdx]) {
-                        data.r2[targetIdx].p2 = w ? w : `Vencedor R1 H${i+1}`;
-                    }
-                });
-            }
-
-            // Propaga Fases Eliminatórias Encadeadas
-            const rounds = Store.category === 'masculino' ? ['r2','r3','qf','sf'] : ['r2','qf','sf'];
-            rounds.forEach((rnd, idx) => {
-                const nextRnd = ['r3','qf','sf','final'][Store.category === 'feminino' && rnd === 'r2' ? 1 : idx];
-                if (!data[rnd] || !data[nextRnd]) return;
-
-                data[rnd].forEach((h, i) => {
-                    const targetHeat = data[nextRnd][Math.floor(i / 2)];
-                    if (targetHeat) {
-                        const slotKey = i % 2 === 0 ? 'p1' : 'p2';
-                        targetHeat[slotKey] = h.winner ? h.winner : `Aguardando...`;
-                    }
-                });
-            });
-
-            if (data.final && data.final[0]) {
-                data.champion = data.final[0].winner || null;
+            if (!possuiCache) {
+                await sincronizarWSLAuto();
             }
         }
 
-        // INTEGRAÇÃO DE API COM ALOCAÇÃO ESTRUTURADA
-        async function syncWSL() {
-            showToast("⏳ Conectando à API WSL...");
-            const currentEv = Store.events.find(e => e.id === Store.currentEventId);
+        function populateSelect() {
+            const s = document.getElementById('eventSelect');
+            s.innerHTML = '';
+            wslEvents.forEach(e => s.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+            s.value = currentEvent.id;
             
-            try {
-                const res = await fetch(`/api-wsl?url=${encodeURIComponent(currentEv.url)}`);
-                const json = await res.json();
-
-                if (!json.sucesso || !json.baterias || json.baterias.length === 0) {
-                    showToast("⚠️ Baterias não identificadas.");
-                    return;
-                }
-
-                const catData = Store.stateData[Store.currentEventId][Store.category];
-                const flatHeats = [];
-                const rounds = Store.category === 'masculino' ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
+            s.addEventListener('change', async e => { 
+                currentEvent = wslEvents.find(ev => ev.id === e.target.value); 
+                document.getElementById('wsl-link').href = currentEvent.wslUrl;
                 
-                rounds.forEach(r => { if (catData[r]) catData[r].forEach(h => flatHeats.push(h)); });
+                const possuiCache = carregarPalpitesLocais();
+                recalculateCascades();
+                renderBanner(); 
+                renderBracket(); 
 
-                // Alocação Estruturada por Ordem de Chaveamento
-                let updated = 0;
-                const totalToFill = Math.min(json.baterias.length, flatHeats.length);
-
-                for (let i = 0; i < totalToFill; i++) {
-                    const ext = json.baterias[i];
-                    const sys = flatHeats[i];
-
-                    sys.p1 = ext.p1;
-                    sys.p2 = ext.p2;
-                    sys.winner = ext.winner ? ext.winner : null;
-                    updated++;
+                if (!possuiCache) {
+                    await sincronizarWSLAuto();
                 }
+            });
+            
+            document.getElementById('wsl-link').href = currentEvent.wslUrl;
 
-                propagateCascades();
-                saveState();
-                renderUI();
-                showToast(`✅ ${updated} baterias sincronizadas com sucesso!`);
-
-            } catch (e) {
-                showToast("⚠️ Falha na comunicação com o servidor.");
-            }
-        }
-
-        // RENDERIZAÇÃO DOM PURA
-        function renderUI() {
-            const currentEv = Store.events.find(e => e.id === Store.currentEventId);
-            document.getElementById('eventBanner').innerHTML = `<h2>${currentEv.name}</h2><p>📍 ${currentEv.loc} | 📅 ${currentEv.dates}</p>`;
-
-            const container = document.getElementById('bracketContainer');
-            container.innerHTML = `<svg id="svg-lines-layer"></svg>`;
-
-            const data = Store.stateData[Store.currentEventId][Store.category];
-            const isMasc = Store.category === 'masculino';
-            const rounds = isMasc ? ['r1','r2','r3','qf','sf'] : ['r1','r2','qf','sf'];
-            const titles = isMasc ? ['Round 1','Round 2 (A)','Oitavas (A)','Quartas (A)','Semi (A)'] : ['Round 1','Round 2 (A)','Quartas (A)','Semi (A)'];
-
-            // Lado Esquerdo
-            const leftSide = document.createElement('div');
-            leftSide.className = 'side-bracket';
-            rounds.forEach((r, idx) => {
-                if (!data[r]) return;
-                const total = data[r].length;
-                const half = Math.max(1, Math.floor(total / 2));
-                const col = document.createElement('div');
-                col.className = 'round-column';
-                
-                let inner = `<div class="round-header">${titles[idx]}</div><div class="heats-container">`;
-                for (let i = 0; i < half; i++) {
-                    const h = data[r][i];
-                    inner += `
-                        <div class="heat-node">
-                            <div class="heat-card-wrapper">
-                                <div class="heat-card" data-round="${r}" data-heat="${i}">
-                                    <div class="heat-title">HEAT ${i + 1}</div>
-                                    <div class="surfer-slot ${h.winner === h.p1 ? 'winner':''}" data-slot="1"><span class="surfer-name">${h.p1}</span></div>
-                                    <div class="surfer-slot ${h.winner === h.p2 ? 'winner':''}" data-slot="2"><span class="surfer-name">${h.p2}</span></div>
-                                </div>
-                            </div>
-                        </div>`;
+            document.getElementById('btnMasc').addEventListener('click', () => { currentCategory = 'masculino'; document.getElementById('btnMasc').classList.add('active'); document.getElementById('btnFem').classList.remove('active'); renderBracket(); });
+            document.getElementById('btnFem').addEventListener('click', () => { currentCategory = 'feminino'; document.getElementById('btnFem').classList.add('active'); document.getElementById('btnMasc').classList.remove('active'); renderBracket(); });
+            document.getElementById('btnResetAll').addEventListener('click', () => { if(confirm("Resetar chaves?")) { resetBracket(); renderBracket(); } });
+            
+            document.getElementById('bracketContainer').addEventListener('click', e => {
+                if (e.target.closest('.btn-reset-heat')) {
+                    const btn = e.target.closest('.btn-reset-heat');
+                    resetSingleHeat(btn.dataset.round, parseInt(btn.dataset.heat));
                 }
-                inner += `</div>`;
-                col.innerHTML = inner;
-                leftSide.appendChild(col);
+                const slot = e.target.closest('.surfer-slot:not(.disabled)');
+                if (slot) {
+                    setWinner(slot.dataset.round, parseInt(slot.dataset.heat), parseInt(slot.dataset.slot));
+                }
             });
 
-            // Centro (Final)
-            const center = document.createElement('div');
-            center.className = 'center-bracket';
-            const fh = data.final[0];
-            center.innerHTML = `
-                <div class="round-header">GRANDE FINAL</div>
-                <div class="heat-card-wrapper" style="width:100%;">
-                    <div class="heat-card" data-round="final" data-heat="0">
-                        <div class="heat-title">FINAL</div>
-                        <div class="surfer-slot ${fh.winner === fh.p1 ? 'winner':''}" data-slot="1"><span class="surfer-name">${fh.p1}</span></div>
-                        <div class="surfer-slot ${fh.winner === fh.p2 ? 'winner':''}" data-slot="2"><span class="surfer-name">${fh.p2}</span></div>
-                    </div>
-                </div>
-                ${data.champion ? `<div style="margin-top:15px; font-weight:800; color:var(--wsl-accent);">🏆 CAMPEÃO: ${data.champion}</div>` : ''}
-            `;
-
-            container.appendChild(leftSide);
-            container.appendChild(center);
+            document.getElementById('btnSyncWSL').addEventListener('click', sincronizarWSLAuto);
         }
 
         function showToast(msg) {
-            const t = document.getElementById('toast');
+            const t = document.getElementById('toastNotification');
             t.textContent = msg; t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 3000);
+            setTimeout(() => t.classList.remove('show'), 4000);
         }
 
-        // EVENT LISTENERS E INICIALIZAÇÃO
-        function init() {
-            const select = document.getElementById('eventSelect');
-            Store.events.forEach(e => select.innerHTML += `<option value="${e.id}">${e.name}</option>`);
-            select.value = Store.currentEventId;
+        async function sincronizarWSLAuto() {
+            showToast("⏳ Conectando à WSL via Anakin.io...");
+            try {
+                const response = await fetch(`/api-wsl?url=${encodeURIComponent(currentEvent.wslUrl)}`);
+                const data = await response.json();
 
-            select.addEventListener('change', async e => {
-                Store.currentEventId = e.target.value;
-                const hasCache = loadState();
-                renderUI();
-                if (!hasCache) await syncWSL();
-            });
+                if (!data.sucesso || !data.baterias || data.baterias.length === 0) {
+                    showToast(`⚠️ ${data.mensagem || 'Baterias não encontradas.'} Abrindo modo manual...`);
+                    document.getElementById('manualSyncBox').classList.add('active');
+                    return;
+                }
 
-            document.getElementById('btnMasc').addEventListener('click', () => {
-                Store.category = 'masculino';
-                document.getElementById('btnMasc').classList.add('active');
-                document.getElementById('btnFem').classList.remove('active');
-                renderUI();
-            });
+                aplicarBateriasSincronizadas(data.baterias);
+            } catch (err) {
+                console.error("Erro na busca automática:", err);
+                showToast("⚠️ Falha na conexão automática. Abrindo modo manual...");
+                document.getElementById('manualSyncBox').classList.add('active');
+            }
+        }
 
-            document.getElementById('btnFem').addEventListener('click', () => {
-                Store.category = 'feminino';
-                document.getElementById('btnFem').classList.add('active');
-                document.getElementById('btnMasc').classList.remove('active');
-                renderUI();
-            });
+        function aplicarBateriasSincronizadas(baterias) {
+            if (!baterias || baterias.length === 0) return;
 
-            document.getElementById('btnSync').addEventListener('click', syncWSL);
-            document.getElementById('btnReset').addEventListener('click', () => {
-                if (confirm("Resetar palpites da etapa?")) {
-                    Store.stateData[Store.currentEventId] = createEmptyBracket();
-                    saveState();
-                    renderUI();
+            const catHeats = currentEvent.heats[currentCategory];
+            const isMasc = currentCategory === 'masculino';
+            const rounds = isMasc ? ['r1','r2','r3','qf','sf','final'] : ['r1','r2','qf','sf','final'];
+
+            const flatSysHeats = [];
+            rounds.forEach(r => {
+                if (catHeats[r]) {
+                    catHeats[r].forEach(h => flatSysHeats.push(h));
                 }
             });
 
-            document.getElementById('bracketContainer').addEventListener('click', e => {
-                const slot = e.target.closest('.surfer-slot');
-                if (!slot) return;
-                const card = slot.closest('.heat-card');
-                const round = card.dataset.round;
-                const heatIdx = parseInt(card.dataset.heat);
-                const slotIdx = parseInt(slot.dataset.slot);
+            const getLastName = (name) => {
+                if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
+                const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                const parts = clean.split(/\s+/);
+                return parts[parts.length - 1];
+            };
 
-                const h = Store.stateData[Store.currentEventId][Store.category][round][heatIdx];
-                const pickedName = slotIdx === 1 ? h.p1 : h.p2;
+            let totalAtualizadas = 0;
+            const totalToFill = Math.min(baterias.length, flatSysHeats.length);
 
-                if (!pickedName || pickedName === 'Aguardando...' || pickedName.includes('Vencedor')) return;
+            // Preenchimento sequencial garantido das baterias extraídas
+            for (let idx = 0; idx < totalToFill; idx++) {
+                const ext = baterias[idx];
+                const sysHeat = flatSysHeats[idx];
 
-                h.winner = pickedName;
-                propagateCascades();
-                saveState();
-                renderUI();
-            });
+                sysHeat.p1 = ext.p1;
+                sysHeat.p2 = ext.p2;
 
-            const hasCache = loadState();
-            renderUI();
-            if (!hasCache) syncWSL();
+                const extWinnerLast = getLastName(ext.winner);
+                if (extWinnerLast) {
+                    if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+                    else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+                    else sysHeat.winner = ext.winner;
+                }
+                totalAtualizadas++;
+            }
+
+            currentEvent.defined = true;
+            recalculateCascades();
+            salvarPalpitesLocal();
+            renderBracket();
+            showToast(`✅ ${totalAtualizadas} baterias sincronizadas em toda a chave!`);
         }
 
-        document.addEventListener('DOMContentLoaded', init);
+        function processarHTMLManual() {
+            const html = document.getElementById('wsl-source').value;
+            
+            if (!html || html.length < 100) {
+                showToast("⚠️ Por favor, cole o código-fonte válido da página da WSL.");
+                return;
+            }
+
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                const heats = doc.querySelectorAll('.hot-heat, .post-event-watch-heat, .bracket-heat, [class*="Heat_container"], [class*="Match"]');
+                if (heats.length === 0) {
+                    showToast("⚠️ Nenhuma bateria encontrada no HTML.");
+                    return;
+                }
+
+                function getCleanName(athleteEl) {
+                    const img = athleteEl.querySelector('img[alt]');
+                    if (img && img.alt && img.alt.length > 3 && !img.alt.toLowerCase().match(/flag|avatar|logo/)) {
+                        return img.alt.trim();
+                    }
+
+                    const clone = athleteEl.cloneNode(true);
+                    const lixos = clone.querySelectorAll('.hot-heat-athlete__name--short, .athlete-country-name, .hot-heat-athlete__seed, .total, .score, [class*="Score"]');
+                    lixos.forEach(lixo => lixo.remove());
+
+                    const full = clone.querySelector('.hot-heat-athlete__name--full, [class*="FullName"]');
+                    if (full) return full.textContent.trim();
+
+                    const link = clone.querySelector('a');
+                    if (link) return link.textContent.trim().replace(/\s{2,}/g, ' ');
+
+                    let text = clone.textContent.replace(/[0-9.]/g, '').replace(/[\n\r\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+                    return text || 'Aguardando...';
+                }
+
+                const extractedHeats = [];
+
+                heats.forEach(heatEl => {
+                    const athletes = heatEl.querySelectorAll('.hot-heat-athlete, .post-event-watch-heat-athlete, .bracket-athlete, [class*="Athlete_container"], [class*="Participant"]');
+                    if (athletes.length >= 2) {
+                        let p1 = getCleanName(athletes[0]);
+                        let p2 = getCleanName(athletes[1]);
+
+                        if (p1.match(/tbd|tbc/i)) p1 = 'Aguardando...';
+                        if (p2.match(/tbd|tbc/i)) p2 = 'Aguardando...';
+
+                        if (p1 === 'Aguardando...' && p2 === 'Aguardando...') return;
+
+                        let winner = null;
+                        if (p1 !== 'Aguardando...' && p2 !== 'Aguardando...' && p1 !== p2) {
+                            const isWin1 = athletes[0].className.match(/is-advancing|is-winner|winner/i) || athletes[0].querySelector('.is-advancing, .is-winner, .color-red, .hot-heat-athlete__difference');
+                            const isWin2 = athletes[1].className.match(/is-advancing|is-winner|winner/i) || athletes[1].querySelector('.is-advancing, .is-winner, .color-red, .hot-heat-athlete__difference');
+                            
+                            if (isWin1 && !isWin2) winner = p1;
+                            else if (isWin2 && !isWin1) winner = p2;
+                            else {
+                                const s1 = parseFloat(athletes[0].querySelector('.total, .score, [class*="Score"]')?.textContent) || 0;
+                                const s2 = parseFloat(athletes[1].querySelector('.total, .score, [class*="Score"]')?.textContent) || 0;
+                                if (s1 > s2) winner = p1;
+                                else if (s2 > s1) winner = p2;
+                            }
+                        }
+
+                        extractedHeats.push({ p1, p2, winner });
+                    }
+                });
+
+                aplicarBateriasSincronizadas(extractedHeats);
+
+                document.getElementById('manualSyncBox').classList.remove('active');
+                document.getElementById('wsl-source').value = '';
+
+            } catch(err) {
+                console.error("Erro de Parse:", err);
+                showToast("⚠️ Ocorreu um erro técnico na leitura do HTML.");
+            }
+        }
+
+        function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }
+        
+        function resetSingleHeat(round, idx) { 
+            currentEvent.heats[currentCategory][round][idx].winner = null; 
+            recalculateCascades(); 
+            salvarPalpitesLocal();
+            renderBracket(); 
+        }
+        
+        function resetBracket() { 
+            Object.values(currentEvent.heats[currentCategory]).forEach(r => Array.isArray(r) && r.forEach(h => h.winner = null)); 
+            currentEvent.heats[currentCategory].champion = null; 
+            recalculateCascades(); 
+            salvarPalpitesLocal();
+            renderBracket();
+        }
+        
+        function setWinner(round, heatIdx, slot) {
+            const hd = currentEvent.heats[currentCategory][round][heatIdx];
+            const name = slot === 1 ? hd.p1 : hd.p2;
+            if(!name || name.includes('Vencedor') || name === 'Aguardando...') return;
+            hd.winner = name;
+            recalculateCascades();
+            salvarPalpitesLocal();
+            renderBracket();
+        }
+
+        function recalculateCascades() {
+            const cd = currentEvent.heats[currentCategory];
+            if(cd.r1) cd.r1.forEach((h, i) => {
+                const w = h.winner;
+                if(currentCategory === 'masculino' && cd.r2[[8,5,2,12][i]]) updateSlot(cd.r2[[8,5,2,12][i]], 'p2', w ? w : `Vencedor R1 H${i+1}`);
+                if(currentCategory === 'feminino' && cd.r2[[4,0,2,6,1,7,3,5][i]]) updateSlot(cd.r2[[4,0,2,6,1,7,3,5][i]], 'p2', w ? w : `Vencedora R1 H${i+1}`);
+            });
+            ['r2','r3','qf','sf'].forEach((rnd, step) => {
+                if(!cd[rnd]) return;
+                const nextRnd = ['r3','qf','sf','final'][currentCategory === 'feminino' && rnd === 'r2' ? 1 : step];
+                if(!cd[nextRnd]) return;
+                cd[rnd].forEach((h, i) => {
+                    const w = (h.winner && (h.winner === h.p1 || h.winner === h.p2)) ? h.winner : null;
+                    if(cd[nextRnd][Math.floor(i/2)]) updateSlot(cd[nextRnd][Math.floor(i/2)], i%2===0?'p1':'p2', w);
+                });
+            });
+            if(cd.final && cd.final[0]) {
+                const fh = cd.final[0];
+                cd.champion = (fh.winner && (fh.winner === fh.p1 || fh.winner === fh.p2)) ? fh.winner : null;
+                if(!cd.champion) fh.winner = null;
+            }
+        }
+
+        function renderBanner() {
+            document.getElementById('eventBanner').innerHTML = `<div class="event-meta"><h2>${currentEvent.name}</h2><p>📍 ${currentEvent.location} | 📅 ${currentEvent.dates}</p></div>`;
+        }
+
+        function createHeatHTML(heat, round, idx, isFinal) {
+            const v1 = heat.p1 && !heat.p1.includes('Vencedor') && heat.p1 !== 'Aguardando...';
+            const v2 = heat.p2 && !heat.p2.includes('Vencedor') && heat.p2 !== 'Aguardando...';
+            return `
+                <div class="heat-card ${isFinal?'final-card':''}" id="dom-${round}-${idx}">
+                    <div class="heat-title">
+                        <span>${isFinal ? 'FINAL' : `HEAT ${idx + 1}`}</span>
+                        ${heat.winner ? `<button type="button" class="btn-reset-heat" data-round="${round}" data-heat="${idx}">↺</button>` : ''}
+                    </div>
+                    <div class="surfer-slot ${heat.winner === heat.p1?'winner':''} ${!v1?'disabled':''}" data-round="${round}" data-heat="${idx}" data-slot="1">
+                        <div class="surfer-info-group">${getSurferAvatarHTML(heat.p1)} <span class="surfer-name">${escapeHTML(heat.p1)}</span></div>
+                        <span class="status-badge">${heat.winner === heat.p1 ? '✓ WIN' : 'ADV'}</span>
+                    </div>
+                    <div class="surfer-slot ${heat.winner === heat.p2?'winner':''} ${!v2?'disabled':''}" data-round="${round}" data-heat="${idx}" data-slot="2">
+                        <div class="surfer-info-group">${getSurferAvatarHTML(heat.p2)} <span class="surfer-name">${escapeHTML(heat.p2)}</span></div>
+                        <span class="status-badge">${heat.winner === heat.p2 ? '✓ WIN' : 'ADV'}</span>
+                    </div>
+                </div>`;
+        }
+
+        function renderBracket() {
+            const container = document.getElementById('bracketContainer');
+            container.innerHTML = `<svg id="svg-lines-layer"></svg>`; 
+            globalLinksToDraw = []; 
+
+            const cd = currentEvent.heats[currentCategory];
+            const isMasc = currentCategory === 'masculino';
+            const rRounds = isMasc ? ['r1','r2','r3','qf','sf'] : ['r1','r2','qf','sf'];
+            const rTitles = isMasc ? ['Round 1','Round 2 (A)','Oitavas (A)','Quartas (A)','Semi (A)'] : ['Round 1','Round 2 (A)','Quartas (A)','Semi (A)'];
+
+            const leftDiv = document.createElement('div'); leftDiv.className = 'side-bracket left';
+            rRounds.forEach((r, step) => {
+                if(!cd[r]) return;
+                const total = cd[r].length; const hTotal = Math.max(1, Math.floor(total/2));
+                const col = document.createElement('div'); col.className = 'round-column';
+                col.innerHTML = `<div class="heats-container" id="col-${r}-L"></div>`;
+                
+                let span = 1; if (hTotal === 4) span = 2; if (hTotal === 2) span = 4; if (hTotal === 1) span = 8;
+
+                for(let i = 0; i < hTotal; i++) {
+                    let headerHTML = (i === 0) ? `<div class="round-header-floating">${rTitles[step]}</div>` : '';
+                    col.querySelector('.heats-container').innerHTML += `
+                        <div class="heat-node" style="grid-row: span ${span};">
+                            <div class="heat-card-wrapper">
+                                ${headerHTML}
+                                ${createHeatHTML(cd[r][i], r, i)}
+                            </div>
+                        </div>`;
+                        
+                    if(r !== 'r1' && step < rRounds.length - 1) {
+                        const nextRnd = rRounds[step+1];
+                        globalLinksToDraw.push({ from: `dom-${r}-${i}`, to: `dom-${nextRnd}-${Math.floor(i/2)}`, dir: 'right' });
+                    } else if (r === rRounds[rRounds.length-1] && i === 0) {
+                        globalLinksToDraw.push({ from: `dom-${r}-${i}`, to: `dom-final-0`, dir: 'right' });
+                    }
+                }
+                leftDiv.appendChild(col);
+            });
+
+            const centerDiv = document.createElement('div'); centerDiv.className = 'center-bracket';
+            centerDiv.innerHTML = `
+                <div class="heat-card-wrapper" style="width: 100%; z-index: 10;">
+                    <div class="round-header-floating">GRANDE FINAL</div>
+                    ${createHeatHTML(cd.final[0], 'final', 0, true)}
+                </div>
+                ${cd.champion ? `<div class="champion-card"><span>🏆</span><p>Campeão</p><h3>${escapeHTML(cd.champion)}</h3></div>` : ''}
+            `;
+
+            const rightDiv = document.createElement('div'); rightDiv.className = 'side-bracket right';
+            const rTitlesRight = isMasc ? ['Round 1','Round 2 (B)','Oitavas (B)','Quartas (B)','Semi (B)'] : ['Round 1','Round 2 (B)','Quartas (B)','Semi (B)'];
+
+            [...rRounds].reverse().forEach((r, reverseStep) => {
+                if(!cd[r]) return;
+                const step = rRounds.length - 1 - reverseStep;
+                const total = cd[r].length; const hTotal = Math.max(1, Math.floor(total/2));
+                const col = document.createElement('div'); col.className = 'round-column';
+                col.innerHTML = `<div class="heats-container" id="col-${r}-R"></div>`;
+                
+                let span = 1; if (hTotal === 4) span = 2; if (hTotal === 2) span = 4; if (hTotal === 1) span = 8;
+
+                const startIdx = total > 1 ? hTotal : 0;
+                for(let i = startIdx; i < total; i++) {
+                    let headerHTML = (i === startIdx) ? `<div class="round-header-floating">${rTitlesRight[step]}</div>` : '';
+                    col.querySelector('.heats-container').innerHTML += `
+                        <div class="heat-node" style="grid-row: span ${span};">
+                            <div class="heat-card-wrapper">
+                                ${headerHTML}
+                                ${createHeatHTML(cd[r][i], r, i)}
+                            </div>
+                        </div>`;
+                        
+                    if(r !== 'r1' && step < rRounds.length - 1) {
+                        const nextRnd = rRounds[step+1];
+                        globalLinksToDraw.push({ from: `dom-${r}-${i}`, to: `dom-${nextRnd}-${Math.floor(i/2)}`, dir: 'left' });
+                    } else if (r === rRounds[rRounds.length-1] && i === (total > 1 ? 1 : 0)) {
+                        globalLinksToDraw.push({ from: `dom-${r}-${i}`, to: `dom-final-0`, dir: 'left' });
+                    }
+                }
+                rightDiv.appendChild(col);
+            });
+
+            container.appendChild(leftDiv);
+            container.appendChild(centerDiv);
+            container.appendChild(rightDiv);
+
+            setTimeout(drawSVGLines, 50);
+        }
+
+        function drawSVGLines() {
+            const svg = document.getElementById('svg-lines-layer');
+            const container = document.getElementById('bracketContainer');
+            if(!svg || !container) return;
+            
+            const containerRect = container.getBoundingClientRect();
+            svg.setAttribute('width', containerRect.width);
+            svg.setAttribute('height', containerRect.height);
+            svg.innerHTML = '';
+            let pathsHTML = '';
+
+            globalLinksToDraw.forEach(link => {
+                const el1 = document.getElementById(link.from);
+                const el2 = document.getElementById(link.to);
+                if(!el1 || !el2) return;
+
+                const r1 = el1.getBoundingClientRect();
+                const r2 = el2.getBoundingClientRect();
+
+                const y1 = (r1.top + (r1.height / 2)) - containerRect.top;
+                const y2 = (r2.top + (r2.height / 2)) - containerRect.top;
+
+                if (link.dir === 'right') {
+                    const x1 = (r1.right - containerRect.left);
+                    const x2 = (r2.left - containerRect.left);
+                    const midX = x1 + ((x2 - x1) / 2);
+                    pathsHTML += `<path d="M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}" />`;
+                } else {
+                    const x1 = (r1.left - containerRect.left);
+                    const x2 = (r2.right - containerRect.left);
+                    const midX = x1 - ((x1 - x2) / 2);
+                    pathsHTML += `<path d="M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}" />`;
+                }
+            });
+
+            svg.innerHTML = pathsHTML;
+        }
+
+        document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>

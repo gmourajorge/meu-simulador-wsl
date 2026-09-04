@@ -34,7 +34,7 @@ export default {
                 url: fetchUrl,
                 country: "us",
                 useBrowser: true,
-                formats: ["html"]
+                formats: ["markdown", "html"]
               })
             });
 
@@ -51,7 +51,7 @@ export default {
               if (pollRes.ok) {
                 const result = await pollRes.json();
                 if (result.status === "completed") {
-                  return result.html || (result.data ? result.data.html : "");
+                  return result.markdown || result.html || (result.data ? result.data.markdown || result.data.html : "");
                 } else if (result.status === "failed") break;
               }
             }
@@ -61,74 +61,94 @@ export default {
           }
         };
 
-        const htmlContent = await scrapeSingleUrl(targetURL);
+        const mainContent = await scrapeSingleUrl(targetURL);
 
-        if (!htmlContent) {
-          throw new Error("Não foi possível obter o HTML da WSL.");
+        if (!mainContent) {
+          throw new Error("Não foi possível obter o conteúdo da WSL.");
         }
 
-        // PARSER ESTRUTURADO DE BLOCOS HTML
-        const parseHeatsFromHTML = (rawHtml) => {
-          const heats = [];
-          
-          // Remove trechos de notas parciais/ondas para evitar falsos positivos
-          const sanitizedHtml = rawHtml
-            .replace(/<div[^>]*class="[^"]*wave-score[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
-            .replace(/\d{1,2}\.\d{1,2}\s*\+\s*\d{1,2}\.\d{1,2}/g, '');
+        const roundMatches = [...mainContent.matchAll(/(?:roundId|eventCatId)=(\d+)/g)];
+        let discoveredParams = [...new Set(roundMatches.map(m => m[0]))];
 
-          // Localiza blocos de baterias no HTML
-          const heatBlockRegex = /<div[^>]*class="[^"]*(?:hot-heat|post-event-watch-heat|bracket-heat|Match_container)[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
-          let match;
+        if (discoveredParams.length === 0) {
+          discoveredParams = ['eventCatId=1', 'eventCatId=2'];
+        }
 
-          while ((match = heatBlockRegex.exec(sanitizedHtml)) !== null) {
-            const block = match[1];
+        const baseUrl = targetURL.split('?')[0];
+        const extraUrls = discoveredParams
+          .map(param => `${baseUrl}?${param}`)
+          .filter(u => u !== targetURL)
+          .slice(0, 3);
 
-            // Identifica Atletas e Imagens
-            const athleteNames = [];
-            const nameRegex = /class="[^"]*(?:athlete__name--full|FullName|Participant_name)[^"]*"[^>]*>([^<]+)<\/span>|alt="([^"]+)"/gi;
-            let nameMatch;
-            while ((nameMatch = nameRegex.exec(block)) !== null) {
-              const name = (nameMatch[1] || nameMatch[2] || '').trim();
-              if (name && name.length > 2 && !name.match(/flag|avatar|logo|spoiler|watch|replay/i)) {
-                if (!athleteNames.includes(name)) athleteNames.push(name);
+        const extraContents = await Promise.all(extraUrls.map(u => scrapeSingleUrl(u)));
+        const fullContent = [mainContent, ...extraContents].join("\n").trim();
+
+        // LIMPEZA CRÍTICA: Remove combinações de notas de onda como "7.17 + 6.63" para não poluir os totais
+        const cleanContent = fullContent
+          .replace(/&nbsp;/g, ' ')
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+          .replace(/<[^>]+>/g, '\n')
+          .replace(/\d{1,2}\.\d{1,2}\s*\+\s*\d{1,2}\.\d{1,2}/g, '')
+          .replace(/Make heat picks|\*Fan picks|Details|Replay|Watch [^\n]+/gi, '')
+          .replace(/\r\n|\r/g, '\n');
+
+        const lines = cleanContent.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+        const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) > 0;
+        
+        const isBadName = (s) => {
+          if (!s || s.length < 2 || s.length > 35 || /\d/.test(s)) return true;
+          const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro', 'event', 'product', 'attribute', 'value', 'description', 'image', 'tourism', 'airways', 'resort', 'island', 'surf', 'surfline', 'corona', 'cero', 'status', 'rank'];
+          const l = s.toLowerCase();
+          return bad.some(b => l.includes(b));
+        };
+
+        const heatsFound = [];
+
+        for (let i = 0; i < lines.length; i++) {
+          if (isScore(lines[i])) {
+            let p1 = null;
+            for (let b = 1; b <= 5 && (i - b) >= 0; b++) {
+              if (!isBadName(lines[i - b])) {
+                p1 = lines[i - b];
+                break;
               }
             }
 
-            // Identifica Notas Totais da Bateria
-            const scores = [];
-            const scoreRegex = /class="[^"]*(?:score--total|TotalScore|Participant_score)[^"]*"[^>]*>\s*(\d{1,2}(?:\.\d{1,2})?)\s*</gi;
-            let scoreMatch;
-            while ((scoreMatch = scoreRegex.exec(block)) !== null) {
-              scores.push(parseFloat(scoreMatch[1]));
-            }
+            for (let f = 1; f <= 8 && (i + f) < lines.length; f++) {
+              if (isScore(lines[i + f])) {
+                let p2 = null;
+                for (let k = i + 1; k < i + f; k++) {
+                  if (!isBadName(lines[k])) {
+                    p2 = lines[k];
+                    break;
+                  }
+                }
 
-            if (athleteNames.length >= 2) {
-              const p1 = athleteNames[0];
-              const p2 = athleteNames[1];
-              const score1 = scores[0] !== undefined ? scores[0] : 0;
-              const score2 = scores[1] !== undefined ? scores[1] : 0;
+                if (p1 && p2 && p1 !== p2) {
+                  const score1 = parseFloat(lines[i]);
+                  const score2 = parseFloat(lines[i + f]);
+                  let winner = null;
+                  if (score1 > score2) winner = p1;
+                  else if (score2 > score1) winner = p2;
 
-              let winner = null;
-              if (score1 > score2) winner = p1;
-              else if (score2 > score1) winner = p2;
-
-              heats.push({ p1, p2, score1, score2, winner });
+                  heatsFound.push({ p1, p2, score1, score2, winner });
+                  i = i + f;
+                  break;
+                }
+              }
             }
           }
-          return heats;
-        };
+        }
 
-        const extractedHeats = parseHeatsFromHTML(htmlContent);
-
-        // Deduplicação por nomes de confrontos
         const unicos = [];
         const keys = new Set();
-        extractedHeats.forEach(h => {
+        heatsFound.forEach(h => {
           const k = `${h.p1}-${h.p2}`;
-          const kRev = `${h.p2}-${h.p1}`;
-          if (!keys.has(k) && !keys.has(kRev)) {
-            keys.add(k);
-            unicos.push(h);
+          const kReverse = `${h.p2}-${h.p1}`;
+          if (!keys.has(k) && !keys.has(kReverse)) { 
+            keys.add(k); 
+            unicos.push(h); 
           }
         });
 
