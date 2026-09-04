@@ -69,35 +69,71 @@ export default {
           throw new Error("Tempo limite excedido para obter a resposta.");
         }
 
-        // Normalização do texto bruto
+        // 1. Normalização profunda de caracteres e quebras
         const cleanContent = content
+          .replace(/&nbsp;/g, ' ')
+          .replace(/[\u00A0\u1680\u180E\u2000-\u200B\u202F\u205F\u3000]/g, ' ')
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ');
+          .replace(/<[^>]+>/g, '\n')
+          .replace(/\r\n|\r/g, '\n');
 
+        const lines = cleanContent
+          .split('\n')
+          .map(l => l.trim())
+          .filter(l => l.length > 0);
+
+        // 2. Funções de validação de elementos
+        const isScore = (s) => /^\d{1,2}\.\d{1,2}$/.test(s) && parseFloat(s) <= 20.0;
+        const isBadName = (s) => {
+          if (!s || s.length < 2 || s.length > 35 || /\d/.test(s)) return true;
+          const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro'];
+          const l = s.toLowerCase();
+          return bad.some(b => l.includes(b));
+        };
+
+        // 3. Algoritmo de Varredura Relativa
         const heatsFound = [];
 
-        // Captura o padrão nativo WSL: "C. Houshmand 16.87 G. Medina 15.17" ou "S. Moniz 4.0 C. Houshmand 10.17"
-        const heatRegex = /([A-ZÀ-ÿ]\.\s+[A-Za-zÀ-ÿ'-]+)\s+([\d]{1,2}(?:\.[\d]{1,2})?)\s+([A-ZÀ-ÿ]\.\s+[A-Za-zÀ-ÿ'-]+)\s+([\d]{1,2}(?:\.[\d]{1,2})?)/g;
-        let match;
+        for (let i = 0; i < lines.length; i++) {
+          if (isScore(lines[i])) {
+            // Busca o Nome 1 voltando até 3 linhas
+            let p1 = null;
+            for (let b = 1; b <= 3 && (i - b) >= 0; b++) {
+              if (!isBadName(lines[i - b])) {
+                p1 = lines[i - b];
+                break;
+              }
+            }
 
-        while ((match = heatRegex.exec(cleanContent)) !== null) {
-          const p1 = match[1].trim();
-          const score1 = parseFloat(match[2]);
-          const p2 = match[3].trim();
-          const score2 = parseFloat(match[4]);
+            // Busca a segunda Nota em até 4 linhas à frente
+            for (let f = 1; f <= 4 && (i + f) < lines.length; f++) {
+              if (isScore(lines[i + f])) {
+                // Busca o Nome 2 no intervalo entre as duas notas
+                let p2 = null;
+                for (let k = i + 1; k < i + f; k++) {
+                  if (!isBadName(lines[k])) {
+                    p2 = lines[k];
+                    break;
+                  }
+                }
 
-          // Filtra se os valores numéricos estão na faixa válida de baterias de surfe (0 a 20)
-          if (score1 <= 20.0 && score2 <= 20.0 && p1 !== p2) {
-            let winner = null;
-            if (score1 > score2) winner = p1;
-            else if (score2 > score1) winner = p2;
+                if (p1 && p2 && p1 !== p2) {
+                  const score1 = parseFloat(lines[i]);
+                  const score2 = parseFloat(lines[i + f]);
+                  let winner = null;
+                  if (score1 > score2) winner = p1;
+                  else if (score2 > score1) winner = p2;
 
-            heatsFound.push({ p1, p2, score1, score2, winner });
+                  heatsFound.push({ p1, p2, score1, score2, winner });
+                  i = i + f; // Avança o ponteiro principal
+                  break;
+                }
+              }
+            }
           }
         }
 
-        // Remoção de baterias duplicadas
+        // 4. Consolidação de baterias únicas
         const unicos = [];
         const keys = new Set();
         heatsFound.forEach(h => {
@@ -108,7 +144,8 @@ export default {
         if (unicos.length === 0) {
           return new Response(JSON.stringify({
             sucesso: false,
-            mensagem: "Página carregada via Anakin, mas o padrão das baterias não foi identificado."
+            mensagem: "Página carregada via Anakin, mas o padrão das baterias não foi identificado.",
+            debugLines: lines.slice(0, 50) // Retorna amostra bruta caso falhe
           }), { headers: corsHeaders });
         }
 
