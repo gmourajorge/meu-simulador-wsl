@@ -48,7 +48,6 @@ export default {
 
         const heatsFound = [];
 
-        // Regex para capturar pares de atletas com notas (ex: C. Houshmand 16.87 G. Medina 15.17)
         const heatRegex = /([A-Z]\.\s+[A-Za-z'-]+)\s+([\d.]+)\s+([A-Z]\.\s+[A-Za-z'-]+)\s+([\d.]+)/g;
         let match;
 
@@ -65,7 +64,6 @@ export default {
           heatsFound.push({ p1, p2, score1, score2, winner });
         }
 
-        // Remoção de duplicados
         const unicos = [];
         const keys = new Set();
         heatsFound.forEach(h => {

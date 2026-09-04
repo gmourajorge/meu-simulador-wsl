@@ -30,7 +30,6 @@
         ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
-        /* Header Principal */
         .wsl-header { background-color: #0c1017; color: #fff; padding: 0 16px; height: 48px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; z-index: 10; }
         .wsl-brand { display: flex; align-items: center; gap: 8px; }
         .wsl-logo { background: var(--wsl-accent); color: #fff; font-weight: 900; font-size: 0.85rem; padding: 2px 6px; border-radius: 4px; letter-spacing: 1px; }
@@ -56,7 +55,6 @@
         .event-meta h2 { font-size: 1rem; font-weight: 800; text-transform: uppercase; color: var(--wsl-text-dark); }
         .event-meta p { font-size: 0.72rem; color: var(--wsl-text-muted); margin-top: 1px; }
 
-        /* Estilos da Sincronização Manual */
         .manual-sync-box { display: none; padding: 15px; background: #f8fafc; border-bottom: 1px solid var(--wsl-border-light); flex-shrink: 0; box-shadow: inset 0 -2px 5px rgba(0,0,0,0.02); }
         .manual-sync-box.active { display: block; animation: slideDown 0.3s ease; }
         .manual-sync-box h4 { font-size: 0.85rem; color: var(--wsl-accent); margin-bottom: 8px; text-transform: uppercase; font-weight: 800; }
@@ -153,7 +151,6 @@
 
     <section class="event-details" id="eventBanner"></section>
 
-    <!-- CAIXA DE SINCRONIZAÇÃO MANUAL (Plano de Reserva/Fallback) -->
     <section class="manual-sync-box" id="manualSyncBox">
         <h4>Sincronização Manual (Fallback)</h4>
         <p>1. <a href="#" id="wsl-link" target="_blank" style="color: var(--wsl-accent); font-weight: bold;">Clique aqui para abrir a página da WSL</a> e aperte <b>Ctrl+U</b>.<br>
@@ -324,7 +321,6 @@
                 }
             });
 
-            // Botão "Sincronizar WSL" agora faz a requisição automática via Worker + Anakin
             document.getElementById('btnSyncWSL').addEventListener('click', sincronizarWSLAuto);
         }
 
@@ -334,7 +330,6 @@
             setTimeout(() => t.classList.remove('show'), 4000);
         }
 
-        // --- NOVA FUNÇÃO: SINCRONIZAÇÃO AUTOMÁTICA VIA ANAKIN / WORKER ---
         async function sincronizarWSLAuto() {
             showToast("⏳ Conectando à WSL via Anakin.io...");
             try {
@@ -356,65 +351,24 @@
         }
 
         function aplicarBateriasSincronizadas(baterias) {
-			const catHeats = currentEvent.heats[currentCategory];
-			
-			// Extrai o último nome e limpa acentos
-			const getLastName = (name) => {
-				if (!name) return '';
-				const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-				const parts = clean.split(/\s+/);
-				return parts[parts.length - 1]; // Pega a última palavra (sobrenome)
-			};
-
-			let atualizadas = 0;
-
-			baterias.forEach(ext => {
-				if (!ext.p1 || !ext.p2) return;
-				let atualizouExistente = false;
-
-				const extLastName1 = getLastName(ext.p1);
-				const extLastName2 = getLastName(ext.p2);
-				const extWinnerLastName = getLastName(ext.winner);
-
-				for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
-					if (!catHeats[r]) continue;
-					for (let i = 0; i < catHeats[r].length; i++) {
-						let sysHeat = catHeats[r][i];
-						if (sysHeat.p1 === 'Aguardando...' && sysHeat.p2 === 'Aguardando...') continue;
-
-						const sysLastName1 = getLastName(sysHeat.p1);
-						const sysLastName2 = getLastName(sysHeat.p2);
-
-						// Compara os sobrenomes em ambas as ordens
-						const matchDirect = (sysLastName1 === extLastName1 && sysLastName2 === extLastName2);
-						const matchReverse = (sysLastName1 === extLastName2 && sysLastName2 === extLastName1);
-
-						if (matchDirect || matchReverse) {
-							if (extWinnerLastName) {
-								if (sysLastName1 === extWinnerLastName) sysHeat.winner = sysHeat.p1;
-								else if (sysLastName2 === extWinnerLastName) sysHeat.winner = sysHeat.p2;
-							}
-							atualizouExistente = true;
-							atualizadas++;
-							break;
-						}
-					}
-					if (atualizouExistente) break;
-				}
-			});
-
-			currentEvent.defined = true;
-			recalculateCascades();
-			renderBracket();
-			showToast(`✅ ${atualizadas} baterias atualizadas com sucesso!`);
-		}
             const catHeats = currentEvent.heats[currentCategory];
-            const norm = (n) => n ? n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : '';
+            
+            const getLastName = (name) => {
+                if (!name) return '';
+                const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                const parts = clean.split(/\s+/);
+                return parts[parts.length - 1];
+            };
+
             let atualizadas = 0;
 
             baterias.forEach(ext => {
                 if (!ext.p1 || !ext.p2) return;
                 let atualizouExistente = false;
+
+                const extLastName1 = getLastName(ext.p1);
+                const extLastName2 = getLastName(ext.p2);
+                const extWinnerLastName = getLastName(ext.winner);
 
                 for (const r of ['r1', 'r2', 'r3', 'qf', 'sf', 'final']) {
                     if (!catHeats[r]) continue;
@@ -422,14 +376,16 @@
                         let sysHeat = catHeats[r][i];
                         if (sysHeat.p1 === 'Aguardando...' && sysHeat.p2 === 'Aguardando...') continue;
 
-                        const sysP1 = norm(sysHeat.p1);
-                        const sysP2 = norm(sysHeat.p2);
-                        const extP1 = norm(ext.p1);
-                        const extP2 = norm(ext.p2);
+                        const sysLastName1 = getLastName(sysHeat.p1);
+                        const sysLastName2 = getLastName(sysHeat.p2);
 
-                        if ((sysP1 === extP1 && sysP2 === extP2) || (sysP1 === extP2 && sysP2 === extP1)) {
-                            if (ext.winner) {
-                                sysHeat.winner = (norm(ext.winner) === sysP1) ? sysHeat.p1 : sysHeat.p2;
+                        const matchDirect = (sysLastName1 === extLastName1 && sysLastName2 === extLastName2);
+                        const matchReverse = (sysLastName1 === extLastName2 && sysLastName2 === extLastName1);
+
+                        if (matchDirect || matchReverse) {
+                            if (extWinnerLastName) {
+                                if (sysLastName1 === extWinnerLastName) sysHeat.winner = sysHeat.p1;
+                                else if (sysLastName2 === extWinnerLastName) sysHeat.winner = sysHeat.p2;
                             }
                             atualizouExistente = true;
                             atualizadas++;
@@ -443,10 +399,9 @@
             currentEvent.defined = true;
             recalculateCascades();
             renderBracket();
-            showToast(`✅ ${atualizadas} baterias atualizadas via Anakin!`);
+            showToast(`✅ ${atualizadas} baterias atualizadas com sucesso!`);
         }
 
-        // LÓGICA MANUAL DE EXTRAÇÃO (Caso a chamada da API falhe)
         function processarHTMLManual() {
             const html = document.getElementById('wsl-source').value;
             
@@ -464,9 +419,6 @@
                     showToast("⚠️ Nenhuma bateria encontrada no HTML.");
                     return;
                 }
-
-                const catHeats = currentEvent.heats[currentCategory];
-                let bateriasAtualizadas = 0;
 
                 function getCleanName(athleteEl) {
                     const img = athleteEl.querySelector('img[alt]');
@@ -488,19 +440,6 @@
                     return text || 'Aguardando...';
                 }
 
-                let globalRound = null;
-                const activeTabs = doc.querySelectorAll('.selected, .active, .current, [class*="ActiveTab"], .filter-bar__item-button--active');
-                for (let tab of activeTabs) {
-                    const txt = tab.textContent.trim().toLowerCase();
-                    if (txt.match(/round 1|opening|seeding/)) { globalRound = 'r1'; break; }
-                    if (txt.match(/round 2|elimination/)) { globalRound = 'r2'; break; }
-                    if (txt.match(/round 3|16|oitavas/)) { globalRound = 'r3'; break; }
-                    if (txt.match(/quarter|quartas/)) { globalRound = 'qf'; break; }
-                    if (txt.match(/semi/)) { globalRound = 'sf'; break; }
-                    if (txt.match(/final/)) { globalRound = 'final'; break; }
-                }
-
-                const norm = (n) => n ? n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : '';
                 const extractedHeats = [];
 
                 heats.forEach(heatEl => {
@@ -529,18 +468,7 @@
                             }
                         }
 
-                        let targetRound = globalRound;
-                        const rName = heatEl.querySelector('.round-name, .bracket-round-title, [class*="RoundTitle"]')?.textContent.toLowerCase();
-                        if (rName) {
-                            if (rName.includes('elimination') || rName.includes('round 2')) targetRound = 'r2';
-                            else if (rName.includes('16') || rName.includes('round 3') || rName.includes('oitavas')) targetRound = 'r3';
-                            else if (rName.includes('quarter') || rName.includes('quartas')) targetRound = 'qf';
-                            else if (rName.includes('semi')) targetRound = 'sf';
-                            else if (rName.includes('opening') || rName.includes('round 1')) targetRound = 'r1';
-                            else if (rName.includes('final')) targetRound = 'final';
-                        }
-
-                        extractedHeats.push({ p1, p2, winner, round: targetRound });
+                        extractedHeats.push({ p1, p2, winner });
                     }
                 });
 
