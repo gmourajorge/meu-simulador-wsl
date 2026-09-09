@@ -52,9 +52,6 @@ export default {
       throw new Error("Timeout: A WSL demorou mais de 20s na validação do Cloudflare.");
     };
 
-    // =========================================================================
-    // 1. Calendário (/api-events)
-    // =========================================================================
     if (url.pathname === '/api-events') {
       try {
         const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
@@ -90,9 +87,6 @@ export default {
       }
     }
 
-    // =========================================================================
-    // 2. Resultados da Etapa Dinâmica (/api-wsl)
-    // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
       if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' obrigatório." }), { status: 400, headers: corsHeaders });
@@ -103,10 +97,14 @@ export default {
       const targetCatURL = `${targetURL.split('?')[0]}?eventCatId=${catId}`;
 
       try {
-        const fullMarkdown = await scrapeSingleUrl(targetCatURL, 'markdown');
-        if (!fullMarkdown) throw new Error("Conteúdo da etapa veio vazio.");
+        let rawContent = await scrapeSingleUrl(targetCatURL, 'markdown');
+        if (!rawContent) throw new Error("Conteúdo da etapa veio vazio.");
 
-        const cleanLines = fullMarkdown
+        // Normalização universal: Converte tabelas Markdown (|) e HTML (<...>) em linhas individuais
+        const cleanLines = rawContent
+          .replace(/<[^>]+>/g, '\n')
+          .replace(/\|/g, '\n')
+          .replace(/[*_#`~]/g, '')
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
           .replace(/\d+\s*waves/gi, '')
           .replace(/\d{1,2}\.\d{1,2}\s*\+\s*\d{1,2}\.\d{1,2}/g, '')
@@ -116,10 +114,10 @@ export default {
           .map(l => l.trim())
           .filter(l => l.length > 0);
 
-        const isScore = (s) => /^\d{1,2}\.\d{2}$/.test(s) && parseFloat(s) <= 20.0;
+        const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) >= 0;
         const isBadName = (s) => {
           if (!s || s.length < 2 || s.length > 35 || /\d/.test(s)) return true;
-          const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro', 'event', 'product', 'attribute', 'value', 'description', 'image', 'tourism', 'airways', 'resort', 'island', 'surf', 'surfline', 'corona', 'cero', 'status', 'rank', 'congratulations', 'presented', 'completed'];
+          const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro', 'event', 'product', 'attribute', 'value', 'description', 'image', 'tourism', 'airways', 'resort', 'island', 'surf', 'surfline', 'corona', 'cero', 'status', 'rank', 'congratulations', 'presented', 'completed', 'pts', 'points', 'total'];
           return bad.some(b => s.toLowerCase().includes(b));
         };
 
@@ -127,14 +125,12 @@ export default {
         const heatsFeminino = [];
         let activeCategory = 'masculino';
 
-        // LÓGICA DINÂMICA: Detecta o marco divisório estrutural do texto Markdown
         for (let i = 0; i < cleanLines.length; i++) {
           const lineLower = cleanLines[i].toLowerCase();
           
           if (lineLower.includes("women's") || lineLower.includes("womens")) {
               activeCategory = 'feminino';
           }
-          // Se topar com "Round 1" de novo depois de já ter lido várias baterias do masculino, é a virada da chave!
           if (lineLower === 'round 1' || lineLower === 'seeding round' || lineLower === 'opening round') {
               if (heatsMasculino.length > 10 && activeCategory === 'masculino') {
                   activeCategory = 'feminino';
@@ -143,11 +139,11 @@ export default {
 
           if (isScore(cleanLines[i])) {
             let p1 = null;
-            for (let b = 1; b <= 4 && (i - b) >= 0; b++) {
+            for (let b = 1; b <= 5 && (i - b) >= 0; b++) {
               if (!isBadName(cleanLines[i - b])) { p1 = cleanLines[i - b]; break; }
             }
 
-            for (let f = 1; f <= 6 && (i + f) < cleanLines.length; f++) {
+            for (let f = 1; f <= 8 && (i + f) < cleanLines.length; f++) {
               if (isScore(cleanLines[i + f])) {
                 let p2 = null;
                 for (let k = i + 1; k < i + f; k++) {
@@ -185,13 +181,11 @@ export default {
         const finalMasculino = deduplicate(heatsMasculino);
         const finalFeminino = deduplicate(heatsFeminino);
 
-        // Retorna a chave solicitada baseada na inteligência da estrutura
         let bateriasResponse = [];
         if (catParam === 'feminino') {
-            // Se as mulheres forem detectadas, retorna elas. Se não, infere pelo corte posicional.
             if (finalFeminino.length > 0) bateriasResponse = finalFeminino;
             else if (finalMasculino.length > 40) bateriasResponse = finalMasculino.slice(-23); 
-            else bateriasResponse = finalMasculino; // Último fallback 
+            else bateriasResponse = finalMasculino;
         } else {
             bateriasResponse = finalMasculino.length > 0 ? finalMasculino : finalFeminino;
         }
