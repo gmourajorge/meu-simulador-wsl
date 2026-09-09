@@ -91,7 +91,7 @@ export default {
     }
 
     // =========================================================================
-    // 2. Resultados Dinâmicos (/api-wsl) - PARSER ORIENTADO A CONTEXTO
+    // 2. Resultados Dinâmicos (/api-wsl) - LEITURA COMPLETA DE ABAS
     // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
@@ -119,113 +119,142 @@ export default {
           }), { status: 200, headers: corsHeaders });
         }
 
-        // Limpa lixo de formatação e remove todos os links para anular botões como [Details] e [Replay]
-        const cleanLines = rawContent
+        // --- BUSCA DE ABAS ADICIONAIS (Bracket, Round 2, etc.) ---
+        // Identifica no menu do Markdown outras IDs de rodada para extrair
+        const roundIds = [...new Set([...rawContent.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
+        let extraContents = [];
+        
+        if (roundIds.length > 0) {
+            // Limita a busca a no máximo 3 abas extras para economizar créditos e evitar loops
+            const roundUrls = roundIds.slice(0, 3).map(rid => `${resultsURL}&roundId=${rid}`);
+            // Promise.all executa as chamadas em paralelo (rápido e eficiente)
+            extraContents = await Promise.all(roundUrls.map(u => scrapeSingleUrl(u, 'markdown').catch(() => '')));
+        }
+        
+        // Concatena tudo (Aba principal de R1 + Abas de Brackets)[cite: 1, 2, 3]
+        const fullMarkdown = [rawContent, ...extraContents].join('\n\n');
+
+        const cleanLines = fullMarkdown
           .replace(/<[^>]+>/g, '\n')
           .replace(/\|/g, '\n')
           .replace(/[*_#`~]/g, '')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '')
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Mantém o texto dentro do link, remove a URL[cite: 1, 3]
           .replace(/\r\n|\r/g, '\n')
           .split('\n')
           .map(l => l.trim())
           .filter(l => l.length > 0);
 
         const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) >= 0;
+        
+        const isJunkLine = (s) => {
+          if (!s || s.length < 2 || s.length > 40) return true;
+          const l = s.toLowerCase();
+
+          // Filtro de títulos de etapas do CT
+          const eventKeywords = ['rip curl', 'bells beach', 'gold coast', 'margaret river', 'corona cero', 'el salvador', 'rio pro', 'tahiti', 'fiji', 'trestles', 'portugal', 'philippines', 'pipe masters', 'championship tour', 'world surf league', 'presented by', 'bonsoy', 'vivo', 'lexus', 'outerknown', 'surf city', 'meo'];
+          if (eventKeywords.some(k => l.includes(k))) return true;
+
+          // Filtro de botões de navegação da interface WSL[cite: 2, 3]
+          const navKeywords = ['prizes', 'heat analyzer', 'champions', 'forecast', 'official gear', 'event guide', 'schedule', 'rankings', 'surfers', 'fantasy', 'one ocean', 'store', 'inspired by', 'surf coast'];
+          if (navKeywords.some(k => l.includes(k))) return true;
+
+          // Headers soltos que não acompanham a palavra Heat[cite: 2]
+          if (/^round\s*\d+/i.test(l)) return true;
+          if (/^(quarterfinal|semifinal)s?/i.test(l)) return true;
+          if (/^heat\s*\d+/i.test(l)) return true;
+          if (/^r[1-9]\s*heat\s*\d+/i.test(l)) return true;
+          if (/^qf\s*heat\s*\d+/i.test(l)) return true;
+          if (/^sf\s*heat\s*\d+/i.test(l)) return true;
+          if (/^final/i.test(l)) return true;
+          if (l.includes('waves') || l.includes('wave')) return true;
+          if (l.includes('+')) return true;
+          if (l === '––' || l === '-' || l === '–') return true;
+
+          const bad = ['winner', 'adv.', 'advancing', 'picks', 'fan', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'seed', 'event', 'tourism', 'airways', 'resort', 'surfline'];
+          return bad.some(b => l === b || l.startsWith(b + ' '));
+        };
 
         const heatsMasculino = [];
         const heatsFeminino = [];
         let activeCategory = 'masculino';
 
-        // Variáveis de Estado (Contexto)
-        let currentRound = null;
-        let currentHeatIdx = null;
-        let p1 = null, s1 = null, p2 = null, s2 = null;
+        let currentP1 = null, currentS1 = null, currentP2 = null, currentS2 = null;
+        let activeRound = 'r1', activeHeatIdx = 0;
+        let heatMeta = { round: 'r1', heatIdx: 0 };
 
-        const saveHeat = () => {
-            if (currentRound && p1 && p2 && p1.toLowerCase() !== p2.toLowerCase()) {
-                let winner = null;
-                if (s1 !== null && s2 !== null) {
-                    if (s1 > s2) winner = p1;
-                    else if (s2 > s1) winner = p2;
-                }
-                const heatObj = { p1, p2, score1: s1, score2: s2, winner, round: currentRound, heatIdx: currentHeatIdx };
-                if (activeCategory === 'masculino') heatsMasculino.push(heatObj);
-                else heatsFeminino.push(heatObj);
-            }
-            p1 = null; s1 = null; p2 = null; s2 = null;
+        const processHeat = () => {
+           // Protege contra nomes com números (ex: "Seed #36") ou atletas duplicados
+           if (currentP1 && currentP2 && currentP1.toLowerCase() !== currentP2.toLowerCase() && !/[\d]/.test(currentP1) && !/[\d]/.test(currentP2)) {
+               let winner = null;
+               if (currentS1 !== null && currentS2 !== null) {
+                   if (currentS1 > currentS2) winner = currentP1;
+                   else if (currentS2 > currentS1) winner = currentP2;
+               }
+               const heatObj = { 
+                 p1: currentP1, p2: currentP2, 
+                 score1: currentS1, score2: currentS2, 
+                 winner, 
+                 round: heatMeta.round, heatIdx: heatMeta.heatIdx 
+               };
+               if (activeCategory === 'masculino') heatsMasculino.push(heatObj);
+               else heatsFeminino.push(heatObj);
+           }
+           currentP1 = null; currentS1 = null; currentP2 = null; currentS2 = null;
         };
 
         for (let i = 0; i < cleanLines.length; i++) {
           const line = cleanLines[i];
           const l = line.toLowerCase();
           
-          // Mudança de Categoria: Reseta o estado para garantir que não puxe lixo na transição
           if (l.includes("women's") || l.includes("womens")) {
               saveHeat();
               activeCategory = 'feminino';
-              currentRound = null; 
+              currentRound = null;
               continue;
           }
 
-          // Identificação Estrita de Cabeçalho (Ativa o Contexto)
           let m;
           let isHeader = false;
           if (l === 'final' || l === 'grand final') {
-              saveHeat(); currentRound = 'final'; currentHeatIdx = 0; isHeader = true;
+              saveHeat(); activeRound = 'final'; activeHeatIdx = 0; isHeader = true;
           } else if ((m = l.match(/^(?:qf|quarterfinal|quarterfinals)\s*heat\s*(\d+)/))) {
-              saveHeat(); currentRound = 'qf'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+              saveHeat(); activeRound = 'qf'; activeHeatIdx = parseInt(m[1]) - 1; isHeader = true;
           } else if ((m = l.match(/^(?:sf|semifinal|semifinals)\s*heat\s*(\d+)/))) {
-              saveHeat(); currentRound = 'sf'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+              saveHeat(); activeRound = 'sf'; activeHeatIdx = parseInt(m[1]) - 1; isHeader = true;
           } else if ((m = l.match(/^(?:r\d+|round\s*\d+)\s*heat\s*(\d+)/))) {
-              saveHeat(); const rNum = l.match(/\d+/)[0]; currentRound = 'r' + rNum; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+              saveHeat(); const rNum = l.match(/\d+/)[0]; activeRound = 'r' + rNum; activeHeatIdx = parseInt(m[1]) - 1; isHeader = true;
           } else if ((m = l.match(/^heat\s*(\d+)/))) {
-              saveHeat(); currentRound = 'r1'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+              saveHeat(); activeRound = 'r1'; activeHeatIdx = parseInt(m[1]) - 1; isHeader = true;
           }
 
-          if (isHeader) continue;
-
-          // REGRA DE OURO: Se não encontrou nenhum cabeçalho válido ainda, ignore a linha!
-          if (!currentRound) continue;
-
-          // Ignora lixo interno estrutural que aparece dentro do bloco da bateria
-          if (l.includes('winner adv') || l.includes('picks') || l.includes('fan') ||
-              l === '––' || l === '-' || l === '–' ||
-              l.includes('no waves') || l.includes('waves') || l.includes('wave') ||
-              l.includes('+') || l.includes('seed')) {
+          if (isHeader) {
+              heatMeta = { round: activeRound, heatIdx: activeHeatIdx };
               continue;
           }
 
-          // Processamento de Notas
           if (isScore(line)) {
-              if (p1 && !p2 && s1 === null) s1 = parseFloat(line);
-              else if (p1 && p2 && s2 === null) s2 = parseFloat(line);
-              continue;
-          }
-
-          // Processamento de Nomes (Apenas se a linha tiver o tamanho coerente com nomes)
-          if (line.length > 1 && line.length < 40 && !/[\d]/.test(line)) {
-              let isExpansion = false;
-              // Detecta se a linha atual é a versão longa da linha anterior (L. Thompson -> Luke Thompson)
-              if (p1 && s1 === null && l.endsWith(p1.split(' ').pop().toLowerCase()) && line.length > p1.length) {
-                  p1 = line; isExpansion = true;
-              } else if (p2 && s2 === null && l.endsWith(p2.split(' ').pop().toLowerCase()) && line.length > p2.length) {
-                  p2 = line; isExpansion = true;
+              if (currentP1 && currentS1 === null) currentS1 = parseFloat(line);
+              else if (currentP2 && currentS2 === null) currentS2 = parseFloat(line);
+          } else if (!isJunkLine(line)) {
+              let isDuplicate = false;
+              if (currentP1 && currentS1 === null && l.endsWith(currentP1.split(' ').pop().toLowerCase()) && line.length > currentP1.length) {
+                  currentP1 = line; isDuplicate = true;
+              } else if (currentP2 && currentS2 === null && l.endsWith(currentP2.split(' ').pop().toLowerCase()) && line.length > currentP2.length) {
+                  currentP2 = line; isDuplicate = true;
               }
 
-              if (!isExpansion) {
-                  if (!p1) p1 = line;
-                  else if (!p2) p2 = line;
+              if (!isDuplicate) {
+                  if (!currentP1) currentP1 = line;
+                  else if (!currentP2) currentP2 = line;
                   else {
-                      // Se um terceiro nome apareceu, a bateria encerrou e o cabeçalho falhou. Salva e inicia nova.
-                      saveHeat();
-                      p1 = line;
+                      processHeat();
+                      currentP1 = line;
                   }
               }
           }
         }
-        saveHeat(); // Garante o salvamento da última bateria em memória
+        processHeat(); 
 
-        // Deduplicação final por coordenadas
         const deduplicate = (arr) => {
             const unicosMap = new Map();
             arr.forEach(h => {
@@ -233,7 +262,7 @@ export default {
               if (!unicosMap.has(k)) {
                   unicosMap.set(k, h);
               } else if (unicosMap.get(k).score1 === null && h.score1 !== null) {
-                  unicosMap.set(k, h); // Substitui a versão "Aguardando" por uma com notas reais
+                  unicosMap.set(k, h); 
               }
             });
             return Array.from(unicosMap.values());
