@@ -462,62 +462,51 @@
                 if (!sysHeat || !ext) return;
                 sysHeat.p1 = ext.p1 || 'Aguardando...';
                 sysHeat.p2 = ext.p2 || 'Aguardando...';
-                const extWinnerLast = getLastName(ext.winner);
-                if (extWinnerLast) {
-                    if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
-                    else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
-                    else sysHeat.winner = ext.winner;
-                } else { sysHeat.winner = null; }
+                
+                if (ext.winner) {
+                    const extWinnerLast = getLastName(ext.winner);
+                    if (extWinnerLast) {
+                        if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
+                        else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
+                        else sysHeat.winner = ext.winner;
+                    }
+                } else {
+                    sysHeat.winner = null;
+                }
             };
 
             let totalAtualizadas = 0;
-            const flatSysHeats = [];
+
+            // Extrai uma lista linear apenas para o fallback (sincronização manual html)
+            let flatSysHeats = [];
             const roundKeys = ['r1', 'r2', 'r3', 'qf', 'sf', 'final'];
             roundKeys.forEach(rk => { if (catHeats[rk]) catHeats[rk].forEach(h => flatSysHeats.push(h)); });
 
-            if (currentCategory === 'masculino' && baterias.length === 35 && catHeats.r1 && catHeats.r2 && catHeats.r3) {
-                for (let i = 0; i < 4; i++) assignHeat(catHeats.r1[i], baterias[i]);
-                if (catHeats.final) assignHeat(catHeats.final[0], baterias[4]);
-
-                const r2Indices = [5,6,7,8,9,10,11,12, 20,21,22,23,24,25,26,27];
-                r2Indices.forEach((extIdx, sysIdx) => { if (catHeats.r2[sysIdx]) assignHeat(catHeats.r2[sysIdx], baterias[extIdx]); });
-
-                const r3Indices = [13,14,15,16, 28,29,30,31];
-                r3Indices.forEach((extIdx, sysIdx) => { if (catHeats.r3[sysIdx]) assignHeat(catHeats.r3[sysIdx], baterias[extIdx]); });
-
-                const qfIndices = [17,18, 32,33];
-                qfIndices.forEach((extIdx, sysIdx) => { if (catHeats.qf[sysIdx]) assignHeat(catHeats.qf[sysIdx], baterias[extIdx]); });
-
-                const sfIndices = [19, 34];
-                sfIndices.forEach((extIdx, sysIdx) => { if (catHeats.sf[sysIdx]) assignHeat(catHeats.sf[sysIdx], baterias[extIdx]); });
-                totalAtualizadas = 35;
-            } 
-            else if (currentCategory === 'feminino' && baterias.length === 23 && catHeats.r1 && catHeats.r2) {
-                for(let i=0; i<6; i++) assignHeat(catHeats.r1[i], baterias[i]);
-                assignHeat(catHeats.r1[6], baterias[21]);
-                assignHeat(catHeats.r1[7], baterias[22]);
-
-                for(let i=0; i<8; i++) assignHeat(catHeats.r2[i], baterias[13+i]);
-                for(let i=0; i<4; i++) assignHeat(catHeats.qf[i], baterias[9+i]);
-                for(let i=0; i<2; i++) assignHeat(catHeats.sf[i], baterias[7+i]);
-                
-                assignHeat(catHeats.final[0], baterias[6]);
-                totalAtualizadas = 23;
-            }
-            else {
-                const totalToFill = Math.min(baterias.length, flatSysHeats.length);
-                for (let idx = 0; idx < totalToFill; idx++) {
-                    assignHeat(flatSysHeats[idx], baterias[idx]);
-                    totalAtualizadas++;
+            baterias.forEach((ext, idx) => {
+                // MAPEAMENTO INTELIGENTE DE COORDENADAS
+                if (ext.round && ext.heatIdx !== undefined && catHeats[ext.round]) {
+                    const sysHeat = catHeats[ext.round][ext.heatIdx];
+                    if (sysHeat) {
+                        assignHeat(sysHeat, ext);
+                        totalAtualizadas++;
+                    }
+                } else {
+                    // Fallback para a Extração Manual de HTML (que não envia coordenadas)
+                    if (flatSysHeats[idx]) {
+                        assignHeat(flatSysHeats[idx], ext);
+                        totalAtualizadas++;
+                    }
                 }
-            }
+            });
 
-            if (catHeats.final && catHeats.final[0] && catHeats.final[0].winner) catHeats.champion = catHeats.final[0].winner;
+            if (catHeats.final && catHeats.final[0] && catHeats.final[0].winner) {
+                catHeats.champion = catHeats.final[0].winner;
+            }
 
             currentEvent.defined = true;
             salvarPalpitesLocal();
             renderBracket();
-            if(saveBackup) showToast(`✅ ${totalAtualizadas} baterias organizadas com sucesso!`);
+            if(saveBackup) showToast(`✅ ${totalAtualizadas} baterias carregadas nos locais exatos!`);
         }
 
         function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }

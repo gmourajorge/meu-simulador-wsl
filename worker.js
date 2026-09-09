@@ -53,69 +53,45 @@ export default {
     };
 
     // =========================================================================
-    // ENDPOINT 1: Calendário Oficial CT 2026 (/api-events)
+    // 1. Calendário (/api-events)
     // =========================================================================
     if (url.pathname === '/api-events') {
       try {
-        const markdown = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'markdown');
-        if (!markdown) throw new Error("A página do calendário veio vazia.");
+        const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
+        if (!content) throw new Error("A página do calendário veio vazia.");
 
-        const eventRegex = /\[([^\]]+)\]\(https:\/\/www\.worldsurfleague\.com\/events\/2026\/ct\/(\d+)\/([^/]+)\/(?:main|results)\)/gi;
+        const eventRegex = /\/events\/2026\/ct\/(\d+)\/([^/'"?\s>#]+)/gi;
         const eventsFound = [];
         const seenIds = new Set();
         let match;
 
-        while ((match = eventRegex.exec(markdown)) !== null) {
-          let rawName = match[1]
-            .replace(/\\\n/g, ' ')
-            .replace(/\n/g, ' ')
-            .replace(/\s*Presented By.*/gi, '')
-            .trim();
-          
-          const eventId = match[2];
-          const slug = match[3];
+        while ((match = eventRegex.exec(content)) !== null) {
+          const eventId = match[1];
+          const slug = match[2];
 
-          if (!seenIds.has(eventId)) {
+          if (!seenIds.has(eventId) && !['main', 'results', 'watch', 'standings'].includes(slug)) {
             seenIds.add(eventId);
+            const formattedName = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
             eventsFound.push({
               id: `${slug}-${eventId}`,
               wslUrl: `https://www.worldsurfleague.com/events/2026/ct/${eventId}/${slug}/results`,
-              name: rawName,
+              name: `${eventsFound.length + 1}. ${formattedName}`,
               eventId: eventId,
               slug: slug
             });
           }
         }
 
-        // Inclusão dinâmica do Philippines Pro caso esteja sem link no markdown oficial
-        if (!seenIds.has('444') && markdown.toLowerCase().includes('philippines pro')) {
-          eventsFound.splice(10, 0, {
-            id: "philippines-pro-444",
-            wslUrl: "https://www.worldsurfleague.com/events/2026/ct/444/philippines-pro/results",
-            name: "Philippines Pro",
-            eventId: "444",
-            slug: "philippines-pro"
-          });
-        }
-
-        const eventosFormatados = eventsFound.map((ev, idx) => ({
-          ...ev,
-          name: `${idx + 1}. ${ev.name}`
-        }));
-
-        return new Response(JSON.stringify({
-          sucesso: true,
-          quantidade: eventosFormatados.length,
-          eventos: eventosFormatados
-        }), { headers: corsHeaders });
-
+        if (eventsFound.length === 0) throw new Error("Nenhum link de etapa CT localizado.");
+        return new Response(JSON.stringify({ sucesso: true, quantidade: eventsFound.length, eventos: eventsFound }), { headers: corsHeaders });
       } catch (err) {
         return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 500, headers: corsHeaders });
       }
     }
 
     // =========================================================================
-    // ENDPOINT 2: Leitor de Baterias (/api-wsl) - Suporta Eventos Passados e Futuros
+    // 2. Resultados Dinâmicos (/api-wsl) - STATE MACHINE COM COORDENADAS
     // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
@@ -123,120 +99,136 @@ export default {
 
       const catParam = url.searchParams.get('cat') || 'masculino';
       const catId = catParam === 'feminino' ? '2' : '1';
-      
-      if (!targetURL.endsWith('/results') && !targetURL.includes('/results?')) {
-        targetURL = targetURL.replace(/\/main\/?$/, '') + '/results';
-      }
-
-      const baseUrl = targetURL.split('?')[0];
-      const targetCatURL = `${baseUrl}?eventCatId=${catId}`;
+      targetURL = targetURL.replace(/\/main\/?$/, '') + '/results';
+      const targetCatURL = `${targetURL.split('?')[0]}?eventCatId=${catId}`;
 
       try {
-        const fullMarkdown = await scrapeSingleUrl(targetCatURL, 'markdown');
-        if (!fullMarkdown) throw new Error("Conteúdo da etapa veio vazio.");
+        const rawContent = await scrapeSingleUrl(targetCatURL, 'markdown');
+        if (!rawContent) throw new Error("Conteúdo da etapa veio vazio.");
 
-        // Função de extração por bloco isolado de bateria (Heat X)
-        const parseHeatBlock = (blockText) => {
-          let text = blockText
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-            .replace(/https?:\/\/\S+/g, '')
-            .replace(/Make heat picks|\*Fan picks|Details|Replay|Watch [^\n]+/gi, '')
-            .replace(/Winner Adv[^\n]*/gi, '')
-            .replace(/No waves yet|No waves|\d+\s*waves/gi, '')
-            .replace(/Results are hidden[^\n]*/gi, '')
-            .replace(/Show results|Hide results/gi, '')
-            .replace(/\r\n|\r/g, '\n');
+        const cleanLines = rawContent
+          .replace(/<[^>]+>/g, '\n')
+          .replace(/\|/g, '\n')
+          .replace(/[*_#`~]/g, '')
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+          .replace(/\r\n|\r/g, '\n')
+          .split('\n')
+          .map(l => l.trim())
+          .filter(l => l.length > 0);
 
-          const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-          const isScoreNum = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0;
-          const isJunkLine = (s) => {
-            if (!s || s.length < 2 || s.length > 40) return true;
-            const l = s.toLowerCase();
-            if (/^heat\s*\d+/i.test(l)) return true;
-            if (l === '––' || l === '-' || l === '–') return true;
-            const bad = ['winner', 'adv.', 'advancing', 'picks', 'fan', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'wave', 'waves', 'dawn patrol', 'call', 'upcoming', 'completed', 'champions', 'analyzer', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats'];
-            return bad.some(b => l === b || l.startsWith(b + ' '));
-          };
-
-          const scores = [];
-          const surferCandidates = [];
-
-          for (const line of lines) {
-            if (isScoreNum(line)) {
-              scores.push(parseFloat(line));
-            } else if (!isJunkLine(line)) {
-              surferCandidates.push(line);
-            }
-          }
-
-          // Filtra duplicatas entre nome curto (Ex: L. Thompson) e nome completo (Ex: Luke Thompson)
-          const uniqueNames = [];
-          for (const name of surferCandidates) {
-            const isDuplicate = uniqueNames.some(existing => {
-              if (existing.toLowerCase() === name.toLowerCase()) return true;
-              const lastN = name.split(' ').pop().toLowerCase();
-              const lastE = existing.split(' ').pop().toLowerCase();
-              return lastN === lastE && name.length < existing.length;
-            });
-
-            if (!isDuplicate) {
-              const shortIdx = uniqueNames.findIndex(existing => {
-                const lastN = name.split(' ').pop().toLowerCase();
-                const lastE = existing.split(' ').pop().toLowerCase();
-                return lastN === lastE && name.length > existing.length;
-              });
-
-              if (shortIdx !== -1) uniqueNames[shortIdx] = name;
-              else uniqueNames.push(name);
-            }
-          }
-
-          if (uniqueNames.length < 2) return null;
-
-          const p1 = uniqueNames[0];
-          const p2 = uniqueNames[1];
-          let score1 = null;
-          let score2 = null;
-          let winner = null;
-
-          if (scores.length >= 2) {
-            score1 = scores[0];
-            score2 = scores[1];
-            if (score1 > score2) winner = p1;
-            else if (score2 > score1) winner = p2;
-          }
-
-          return { p1, p2, score1, score2, winner };
+        const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) >= 0;
+        
+        const isJunkLine = (s) => {
+          if (!s || s.length < 2 || s.length > 40) return true;
+          const l = s.toLowerCase();
+          if (/^heat\s*\d+/i.test(l)) return true;
+          if (/^r[1-9]\s*heat\s*\d+/i.test(l)) return true;
+          if (/^qf\s*heat\s*\d+/i.test(l)) return true;
+          if (/^sf\s*heat\s*\d+/i.test(l)) return true;
+          if (/^final/i.test(l)) return true;
+          if (l.includes('waves') || l.includes('wave')) return true;
+          if (l.includes('+')) return true;
+          if (l === '––' || l === '-' || l === '–') return true;
+          const bad = ['winner', 'adv.', 'advancing', 'picks', 'fan', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'champions', 'analyzer', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'seed', 'event', 'tourism', 'airways', 'resort', 'surfline'];
+          return bad.some(b => l === b || l.startsWith(b + ' '));
         };
 
-        // Divide o Markdown em blocos por "Heat X"
-        const heatBlocks = fullMarkdown.split(/(?:^|\n)(?=Heat\s+\d+\b)/i);
-        const heatsFound = [];
+        const heatsMasculino = [];
+        const heatsFeminino = [];
+        let activeCategory = 'masculino';
 
-        for (const block of heatBlocks) {
-          if (!/^Heat\s+\d+/i.test(block.trim())) continue;
-          const parsed = parseHeatBlock(block);
-          if (parsed) heatsFound.push(parsed);
-        }
+        // Estado do Analisador
+        let currentP1 = null, currentS1 = null, currentP2 = null, currentS2 = null;
+        let activeRound = 'r1', activeHeatIdx = 0;
+        let heatMeta = { round: 'r1', heatIdx: 0 };
 
-        // Deduplicação de baterias
-        const unicos = [];
-        const keys = new Set();
-        heatsFound.forEach(h => {
-          const k = `${h.p1}-${h.p2}`;
-          const kRev = `${h.p2}-${h.p1}`;
-          if (!keys.has(k) && !keys.has(kRev)) {
-            keys.add(k);
-            unicos.push(h);
+        const processHeat = () => {
+           if (currentP1 && currentP2) {
+               let winner = null;
+               if (currentS1 !== null && currentS2 !== null) {
+                   if (currentS1 > currentS2) winner = currentP1;
+                   else if (currentS2 > currentS1) winner = currentP2;
+               }
+               const heatObj = { 
+                 p1: currentP1, p2: currentP2, 
+                 score1: currentS1, score2: currentS2, 
+                 winner, 
+                 round: heatMeta.round, heatIdx: heatMeta.heatIdx 
+               };
+               if (activeCategory === 'masculino') heatsMasculino.push(heatObj);
+               else heatsFeminino.push(heatObj);
+           }
+           currentP1 = null; currentS1 = null; currentP2 = null; currentS2 = null;
+        };
+
+        for (let i = 0; i < cleanLines.length; i++) {
+          const line = cleanLines[i];
+          const lineLower = line.toLowerCase();
+          
+          if (lineLower.includes("women's") || lineLower.includes("womens")) activeCategory = 'feminino';
+
+          // Detecta a Coordenada Exata (Fase e Número da Bateria)
+          let m;
+          if (lineLower === 'final' || lineLower === 'grand final') {
+              activeRound = 'final'; activeHeatIdx = 0;
+          } else if ((m = lineLower.match(/^qf\s*heat\s*(\d+)/))) {
+              activeRound = 'qf'; activeHeatIdx = parseInt(m[1]) - 1;
+          } else if ((m = lineLower.match(/^sf\s*heat\s*(\d+)/))) {
+              activeRound = 'sf'; activeHeatIdx = parseInt(m[1]) - 1;
+          } else if ((m = lineLower.match(/^r(\d+)\s*heat\s*(\d+)/))) {
+              activeRound = 'r' + m[1]; activeHeatIdx = parseInt(m[2]) - 1;
+          } else if ((m = lineLower.match(/^heat\s*(\d+)/))) {
+              activeRound = 'r1'; activeHeatIdx = parseInt(m[1]) - 1;
           }
-        });
 
-        return new Response(JSON.stringify({
-          sucesso: true,
-          quantidade: unicos.length,
-          baterias: unicos
-        }), { headers: corsHeaders });
+          if (isScore(line)) {
+              if (currentP1 && currentS1 === null) currentS1 = parseFloat(line);
+              else if (currentP2 && currentS2 === null) currentS2 = parseFloat(line);
+          } else if (!isJunkLine(line)) {
+              let isDuplicate = false;
+              if (currentP1 && currentS1 === null && lineLower.endsWith(currentP1.split(' ').pop().toLowerCase()) && line.length > currentP1.length) {
+                  currentP1 = line; isDuplicate = true;
+              } else if (currentP2 && currentS2 === null && lineLower.endsWith(currentP2.split(' ').pop().toLowerCase()) && line.length > currentP2.length) {
+                  currentP2 = line; isDuplicate = true;
+              }
+
+              if (!isDuplicate) {
+                  if (!currentP1) {
+                      currentP1 = line;
+                      heatMeta = { round: activeRound, heatIdx: activeHeatIdx }; // Congela a coordenada
+                  } else if (!currentP2) {
+                      currentP2 = line;
+                  } else {
+                      processHeat(); // Salva bateria concluída e inicia a nova
+                      currentP1 = line;
+                      heatMeta = { round: activeRound, heatIdx: activeHeatIdx };
+                  }
+              }
+          }
+        }
+        processHeat(); // Garante o salvamento da última bateria lida
+
+        const deduplicate = (arr) => {
+            const unicosMap = new Map();
+            arr.forEach(h => {
+              if (h.p1.toLowerCase().includes('seed') || h.p2.toLowerCase().includes('seed')) return;
+              const k = `${h.round}-${h.heatIdx}`; // Agrupa exatamente pela coordenada!
+              if (!unicosMap.has(k)) {
+                  unicosMap.set(k, h);
+              } else if (unicosMap.get(k).score1 === null && h.score1 !== null) {
+                  unicosMap.set(k, h); // Substitui se achou uma versão com nota
+              }
+            });
+            return Array.from(unicosMap.values());
+        };
+
+        const finalMasculino = deduplicate(heatsMasculino);
+        const finalFeminino = deduplicate(heatsFeminino);
+
+        let bateriasResponse = catParam === 'feminino' ? finalFeminino : finalMasculino;
+        if (bateriasResponse.length === 0) bateriasResponse = (catParam === 'feminino') ? finalMasculino.slice(-23) : finalMasculino;
+
+        return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
 
       } catch (err) {
         return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 500, headers: corsHeaders });
