@@ -91,7 +91,7 @@ export default {
     }
 
     // =========================================================================
-    // 2. Resultados Dinâmicos (/api-wsl) - LEITURA COMPLETA E SEQUENCIAL
+    // 2. Resultados Dinâmicos (/api-wsl) 
     // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
@@ -122,7 +122,6 @@ export default {
         const roundIds = [...new Set([...rawContent.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
         let extraContents = [];
         
-        // Requisições sequenciais (for...of) para evitar Rate Limit na API do Anakin
         if (roundIds.length > 0) {
             const roundUrls = roundIds.slice(0, 3).map(rid => `${resultsURL}&roundId=${rid}`);
             for (const u of roundUrls) {
@@ -140,7 +139,10 @@ export default {
         const cleanLines = fullMarkdown
           .replace(/<[^>]+>/g, '\n')
           .replace(/\|/g, '\n')
-          .replace(/[*_#`~]/g, '')
+          // Remove agressivamente as variações do link de picks do fantasy da WSL[cite: 1, 2, 3]
+          .replace(/make heat picks.*?(fan picks|\*fan picks|\\fan picks|fan)/gi, '')
+          .replace(/make heat picks/gi, '')
+          .replace(/[*_#`~\\]/g, '') // Adicionado o escape \
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
           .replace(/\r\n|\r/g, '\n')
           .split('\n')
@@ -153,6 +155,7 @@ export default {
           if (!s || s.length < 2 || s.length > 40) return true;
           const l = s.toLowerCase();
 
+          // Filtros
           const eventKeywords = ['rip curl', 'bells beach', 'gold coast', 'margaret river', 'corona cero', 'el salvador', 'rio pro', 'tahiti', 'fiji', 'trestles', 'portugal', 'philippines', 'pipe masters', 'championship tour', 'world surf league', 'presented by', 'bonsoy', 'vivo', 'lexus', 'outerknown', 'surf city', 'meo'];
           if (eventKeywords.some(k => l.includes(k))) return true;
 
@@ -170,11 +173,14 @@ export default {
           if (l.includes('+')) return true;
           if (l === '––' || l === '-' || l === '–') return true;
 
-          const bad = ['winner', 'adv.', 'advancing', 'picks', 'fan', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'seed', 'event', 'tourism', 'airways', 'resort', 'surfline'];
+          // Se sobrou algum resquício de picks
+          if (l.includes('picks') || l.includes('fan')) return true; 
+
+          const bad = ['winner', 'adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'seed', 'event', 'tourism', 'airways', 'resort', 'surfline'];
           return bad.some(b => l === b || l.startsWith(b + ' '));
         };
 
-        const heats = []; // Matriz única (A categoria já foi travada pela URL)
+        const heats = []; 
 
         let currentP1 = null, currentS1 = null, currentP2 = null, currentS2 = null;
         let currentRound = null, currentHeatIdx = null; 
