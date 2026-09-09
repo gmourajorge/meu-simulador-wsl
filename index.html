@@ -342,7 +342,6 @@
         // ==========================================
         async function startBackgroundSync() {
             const syncIcon = document.querySelector('.sync-icon');
-            // Busca o span; se não achar, usa o botão inteiro para não dar erro
             const btnText = document.getElementById('btnSyncText') || document.getElementById('btnSyncWSL'); 
             const originalText = btnText.textContent;
             let toSync = [];
@@ -361,7 +360,7 @@
             let count = 0;
             for (let task of toSync) {
                 count++;
-                if(btnText) btnText.textContent = `Progresso... ${Math.round((count/toSync.length)*100)}%`;
+                if(btnText) btnText.textContent = `PROGRESSO... ${Math.round((count/toSync.length)*100)}%`;
                 
                 try {
                     let res = await fetch(`/api-wsl?url=${encodeURIComponent(task.ev.wslUrl)}&cat=${task.cat}`);
@@ -377,6 +376,9 @@
                         localStorage.setItem(`wsl_api_failed_${task.cat}_${task.ev.id}`, 'true');
                     }
                 } catch(e) {}
+
+                // Pausa de 1.5s entre requisições em background para não ser bloqueado
+                await new Promise(r => setTimeout(r, 1500));
             }
 
             if(syncIcon) syncIcon.classList.remove('spinning');

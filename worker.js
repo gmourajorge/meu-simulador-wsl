@@ -18,7 +18,7 @@ export default {
       "Content-Type": "application/json"
     };
 
-    // Função de raspagem unificada (Aumentado de 25s para 40s de tolerância)
+    // Motor de raspagem único por URL (Timeout enxuto de 20s)
     const scrapeSingleUrl = async (fetchUrl, format = "markdown") => {
       const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
         method: "POST",
@@ -28,16 +28,15 @@ export default {
 
       if (!submitRes.ok) {
         const errText = await submitRes.text();
-        throw new Error(`Anakin.io Recusou (HTTP ${submitRes.status}): ${errText}`);
+        throw new Error(`Anakin.io HTTP ${submitRes.status}: ${errText}`);
       }
 
       const jobData = await submitRes.json();
       const jobId = jobData.jobId || jobData.id;
-      if (!jobId) throw new Error("Anakin.io falhou ao gerar o ID do Job.");
+      if (!jobId) throw new Error("Anakin.io não gerou o ID do job.");
 
       let attempts = 0;
-      // AUMENTO DO TEMPO DE ESPERA PARA 40 TENTATIVAS (40 Segundos)
-      while (attempts < 40) {
+      while (attempts < 20) {
         await new Promise(r => setTimeout(r, 1000));
         attempts++;
 
@@ -47,23 +46,22 @@ export default {
           if (result.status === "completed") {
             return result.markdown || result.html || (result.data ? result.data.markdown || result.data.html : "");
           } else if (result.status === "failed") {
-            throw new Error("Anakin.io falhou ao processar a página no servidor de destino.");
+            throw new Error("Falha no servidor do Anakin ao ler a página.");
           }
         }
       }
-      throw new Error("Timeout: A WSL demorou muito na tela de proteção. O Anakin aguardou por 40 segundos e abortou.");
+      throw new Error("Timeout: A WSL demorou mais de 20s na validação do Cloudflare.");
     };
 
     // =========================================================================
-    // 1. Calendário Oficial (/api-events) - EXCLUSIVO VIA ANAKIN
+    // 1. Calendário Oficial (/api-events)
     // =========================================================================
     if (url.pathname === '/api-events') {
       try {
         const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
 
-        if (!content) throw new Error("A página retornou completamente vazia via Anakin.");
+        if (!content) throw new Error("A página do calendário veio vazia.");
 
-        // Regex flexível que varre o HTML atrás dos links das etapas
         const eventRegex = /\/events\/2026\/ct\/(\d+)\/([^/'"?\s>#]+)/gi;
         const eventsFound = [];
         const seenIds = new Set();
@@ -88,7 +86,7 @@ export default {
         }
 
         if (eventsFound.length === 0) {
-          throw new Error("Acesso realizado via Anakin, mas não foram encontrados links de etapas CT no HTML retornado pela WSL.");
+          throw new Error("Nenhum link de etapa CT localizado no HTML retornado.");
         }
 
         return new Response(JSON.stringify({ sucesso: true, quantidade: eventsFound.length, eventos: eventsFound }), { headers: corsHeaders });
@@ -99,7 +97,7 @@ export default {
     }
 
     // =========================================================================
-    // 2. Resultados da Etapa (/api-wsl) - EXCLUSIVO VIA ANAKIN
+    // 2. Resultados da Etapa (/api-wsl) - RASPAGEM DIRETA SEM PROMISE.ALL
     // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
@@ -119,18 +117,9 @@ export default {
       const targetCatURL = `${baseUrl}?eventCatId=${catId}`;
 
       try {
-        const mainMarkdown = await scrapeSingleUrl(targetCatURL);
-        if (!mainMarkdown) throw new Error("A página da etapa retornou vazia.");
-
-        const roundIds = [...new Set([...mainMarkdown.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
-
-        let extraMarkdowns = [];
-        if (roundIds.length > 0) {
-          const roundUrls = roundIds.map(rid => `${baseUrl}?eventCatId=${catId}&roundId=${rid}`);
-          extraMarkdowns = await Promise.all(roundUrls.map(u => scrapeSingleUrl(u)));
-        }
-
-        const fullMarkdown = [mainMarkdown, ...extraMarkdowns].join("\n\n");
+        // Raspa APENAS a página principal da categoria para evitar bloqueios do Cloudflare
+        const fullMarkdown = await scrapeSingleUrl(targetCatURL, 'markdown');
+        if (!fullMarkdown) throw new Error("Conteúdo da etapa veio vazio.");
 
         const cleanLines = fullMarkdown
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
