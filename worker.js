@@ -18,7 +18,6 @@ export default {
       "Content-Type": "application/json"
     };
 
-    // Motor de raspagem único por URL (Timeout enxuto de 20s)
     const scrapeSingleUrl = async (fetchUrl, format = "markdown") => {
       const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
         method: "POST",
@@ -54,12 +53,11 @@ export default {
     };
 
     // =========================================================================
-    // 1. Calendário Oficial (/api-events)
+    // 1. Calendário (/api-events)
     // =========================================================================
     if (url.pathname === '/api-events') {
       try {
         const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
-
         if (!content) throw new Error("A página do calendário veio vazia.");
 
         const eventRegex = /\/events\/2026\/ct\/(\d+)\/([^/'"?\s>#]+)/gi;
@@ -85,39 +83,26 @@ export default {
           }
         }
 
-        if (eventsFound.length === 0) {
-          throw new Error("Nenhum link de etapa CT localizado no HTML retornado.");
-        }
-
+        if (eventsFound.length === 0) throw new Error("Nenhum link de etapa CT localizado.");
         return new Response(JSON.stringify({ sucesso: true, quantidade: eventsFound.length, eventos: eventsFound }), { headers: corsHeaders });
-
       } catch (err) {
         return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 500, headers: corsHeaders });
       }
     }
 
     // =========================================================================
-    // 2. Resultados da Etapa (/api-wsl) - RASPAGEM DIRETA SEM PROMISE.ALL
+    // 2. Resultados da Etapa Dinâmica (/api-wsl)
     // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
-
-      if (!targetURL) {
-        return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' é obrigatório." }), { status: 400, headers: corsHeaders });
-      }
+      if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' obrigatório." }), { status: 400, headers: corsHeaders });
 
       const catParam = url.searchParams.get('cat') || 'masculino';
       const catId = catParam === 'feminino' ? '2' : '1';
-
-      if (!targetURL.endsWith('/results') && !targetURL.includes('/results?')) {
-        targetURL = targetURL.replace(/\/main\/?$/, '') + '/results';
-      }
-
-      const baseUrl = targetURL.split('?')[0];
-      const targetCatURL = `${baseUrl}?eventCatId=${catId}`;
+      targetURL = targetURL.replace(/\/main\/?$/, '') + '/results';
+      const targetCatURL = `${targetURL.split('?')[0]}?eventCatId=${catId}`;
 
       try {
-        // Raspa APENAS a página principal da categoria para evitar bloqueios do Cloudflare
         const fullMarkdown = await scrapeSingleUrl(targetCatURL, 'markdown');
         if (!fullMarkdown) throw new Error("Conteúdo da etapa veio vazio.");
 
@@ -138,9 +123,24 @@ export default {
           return bad.some(b => s.toLowerCase().includes(b));
         };
 
-        const heatsFound = [];
+        const heatsMasculino = [];
+        const heatsFeminino = [];
+        let activeCategory = 'masculino';
 
+        // LÓGICA DINÂMICA: Detecta o marco divisório estrutural do texto Markdown
         for (let i = 0; i < cleanLines.length; i++) {
+          const lineLower = cleanLines[i].toLowerCase();
+          
+          if (lineLower.includes("women's") || lineLower.includes("womens")) {
+              activeCategory = 'feminino';
+          }
+          // Se topar com "Round 1" de novo depois de já ter lido várias baterias do masculino, é a virada da chave!
+          if (lineLower === 'round 1' || lineLower === 'seeding round' || lineLower === 'opening round') {
+              if (heatsMasculino.length > 10 && activeCategory === 'masculino') {
+                  activeCategory = 'feminino';
+              }
+          }
+
           if (isScore(cleanLines[i])) {
             let p1 = null;
             for (let b = 1; b <= 4 && (i - b) >= 0; b++) {
@@ -159,7 +159,11 @@ export default {
                   const score2 = parseFloat(cleanLines[i + f]);
                   let winner = null;
                   if (score1 > score2) winner = p1; else if (score2 > score1) winner = p2;
-                  heatsFound.push({ p1, p2, score1, score2, winner });
+                  
+                  const obj = { p1, p2, score1, score2, winner };
+                  if (activeCategory === 'masculino') heatsMasculino.push(obj);
+                  else heatsFeminino.push(obj);
+
                   i = i + f;
                   break;
                 }
@@ -168,17 +172,31 @@ export default {
           }
         }
 
-        const unicos = [];
-        const keys = new Set();
-        heatsFound.forEach(h => {
-          const k = `${h.p1}-${h.p2}`;
-          const kRev = `${h.p2}-${h.p1}`;
-          if (!keys.has(k) && !keys.has(kRev)) {
-            keys.add(k); unicos.push(h);
-          }
-        });
+        const deduplicate = (arr) => {
+            const unicos = [];
+            const keys = new Set();
+            arr.forEach(h => {
+              const k = `${h.p1}-${h.p2}`; const kRev = `${h.p2}-${h.p1}`;
+              if (!keys.has(k) && !keys.has(kRev)) { keys.add(k); unicos.push(h); }
+            });
+            return unicos;
+        };
 
-        return new Response(JSON.stringify({ sucesso: true, quantidade: unicos.length, baterias: unicos }), { headers: corsHeaders });
+        const finalMasculino = deduplicate(heatsMasculino);
+        const finalFeminino = deduplicate(heatsFeminino);
+
+        // Retorna a chave solicitada baseada na inteligência da estrutura
+        let bateriasResponse = [];
+        if (catParam === 'feminino') {
+            // Se as mulheres forem detectadas, retorna elas. Se não, infere pelo corte posicional.
+            if (finalFeminino.length > 0) bateriasResponse = finalFeminino;
+            else if (finalMasculino.length > 40) bateriasResponse = finalMasculino.slice(-23); 
+            else bateriasResponse = finalMasculino; // Último fallback 
+        } else {
+            bateriasResponse = finalMasculino.length > 0 ? finalMasculino : finalFeminino;
+        }
+
+        return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
 
       } catch (err) {
         return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 500, headers: corsHeaders });

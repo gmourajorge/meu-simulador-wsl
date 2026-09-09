@@ -165,8 +165,7 @@
 
     <div id="toastNotification" class="toast-notification"></div>
 
-    <script>
-        let wslEvents = [];
+    let wslEvents = [];
         let currentEvent = null;
         let currentCategory = 'masculino';
         let globalLinksToDraw = [];
@@ -202,9 +201,6 @@
             return Array.from({ length: count }, (_, i) => ({ id: `h${i + 1}`, p1: 'Aguardando...', p2: 'Aguardando...', winner: null }));
         }
 
-        // ==========================================
-        // CALENDÁRIO COM INTERFACE DE ERRO RESILIENTE
-        // ==========================================
         async function cargarCalendarioDinamico() {
             showLoading("⏳ Conectando à WSL para carregar o calendário...");
             try {
@@ -269,19 +265,16 @@
             return false;
         }
 
-        // ==========================================
-        // FLUXO DE INICIALIZAÇÃO
-        // ==========================================
         async function initApp() {
             const carregou = await cargarCalendarioDinamico();
-            if (!carregou || wslEvents.length === 0) return; // A UI de erro já foi renderizada pelo cargarCalendarioDinamico
+            if (!carregou || wslEvents.length === 0) return;
 
             currentEvent = wslEvents[0];
             populateSelect();
             carregarInterfaceEtapa();
             window.addEventListener('resize', () => requestAnimationFrame(drawSVGLines));
 
-            startBackgroundSync(); // Inicia sync de todas as etapas em 2º plano
+            startBackgroundSync();
         }
 
         async function carregarInterfaceEtapa() {
@@ -337,9 +330,6 @@
             document.getElementById('btnSyncWSL').addEventListener('click', () => sincronizarWSLAuto(true));
         }
 
-        // ==========================================
-        // 1. BACKGROUND SYNC (Com Fallback Seguro UI)
-        // ==========================================
         async function startBackgroundSync() {
             const syncIcon = document.querySelector('.sync-icon');
             const btnText = document.getElementById('btnSyncText') || document.getElementById('btnSyncWSL'); 
@@ -376,8 +366,6 @@
                         localStorage.setItem(`wsl_api_failed_${task.cat}_${task.ev.id}`, 'true');
                     }
                 } catch(e) {}
-
-                // Pausa de 1.5s entre requisições em background para não ser bloqueado
                 await new Promise(r => setTimeout(r, 1500));
             }
 
@@ -410,9 +398,6 @@
             }
         }
 
-        // ==========================================
-        // 2. RESET INTELIGENTE
-        // ==========================================
         function resetBracketInteligente() {
             const catHeats = currentEvent.heats[currentCategory];
             const backupStr = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
@@ -455,9 +440,6 @@
             showToast("🔄 Chave restaurada! Palpites limpos, mas chaveamento mantido.");
         }
 
-        // ==========================================
-        // LÓGICA CORE BLINDADA (Corrige o Erro Feminino)
-        // ==========================================
         function aplicarBateriasSincronizadas(baterias, saveBackup = true) {
             if (!baterias || baterias.length === 0) return;
 
@@ -488,7 +470,6 @@
             };
 
             let totalAtualizadas = 0;
-
             const flatSysHeats = [];
             const roundKeys = ['r1', 'r2', 'r3', 'qf', 'sf', 'final'];
             roundKeys.forEach(rk => { if (catHeats[rk]) catHeats[rk].forEach(h => flatSysHeats.push(h)); });
@@ -674,31 +655,6 @@
             setTimeout(drawSVGLines, 50);
         }
 
-        function drawSVGLines() {
-            const svg = document.getElementById('svg-lines-layer');
-            const container = document.getElementById('bracketContainer');
-            if(!svg || !container) return;
-            const containerRect = container.getBoundingClientRect();
-            svg.setAttribute('width', containerRect.width);
-            svg.setAttribute('height', containerRect.height);
-            svg.innerHTML = '';
-            let pathsHTML = '';
-            globalLinksToDraw.forEach(link => {
-                const el1 = document.getElementById(link.from); const el2 = document.getElementById(link.to);
-                if(!el1 || !el2) return;
-                const r1 = el1.getBoundingClientRect(); const r2 = el2.getBoundingClientRect();
-                const y1 = (r1.top + (r1.height / 2)) - containerRect.top; const y2 = (r2.top + (r2.height / 2)) - containerRect.top;
-                if (link.dir === 'right') {
-                    const x1 = (r1.right - containerRect.left); const x2 = (r2.left - containerRect.left); const midX = x1 + ((x2 - x1) / 2);
-                    pathsHTML += `<path d="M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}" />`;
-                } else {
-                    const x1 = (r1.left - containerRect.left); const x2 = (r2.right - containerRect.left); const midX = x1 - ((x1 - x2) / 2);
-                    pathsHTML += `<path d="M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}" />`;
-                }
-            });
-            svg.innerHTML = pathsHTML;
-        }
-
         function processarHTMLManual() {
             const html = document.getElementById('wsl-source').value;
             if (!html || html.length < 100) { showToast("⚠️ Por favor, cole o código-fonte válido."); return; }
@@ -751,5 +707,7 @@
 
         document.addEventListener('DOMContentLoaded', initApp);
     </script>
+</body>
+</html>
 </body>
 </html>
