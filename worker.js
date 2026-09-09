@@ -84,7 +84,7 @@ export default {
         if (eventsFound.length === 0) throw new Error("Nenhum link de etapa CT localizado.");
         return new Response(JSON.stringify({ sucesso: true, quantidade: eventsFound.length, eventos: eventsFound }), { headers: corsHeaders });
       } catch (err) {
-        return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 200, headers: corsHeaders });
       }
     }
 
@@ -95,23 +95,25 @@ export default {
 
       const catParam = url.searchParams.get('cat') || 'masculino';
       const catId = catParam === 'feminino' ? '2' : '1';
-      targetURL = targetURL.replace(/\/main\/?$/, '') + '/results';
-      const targetCatURL = `${targetURL.split('?')[0]}?eventCatId=${catId}`;
+      
+      const cleanBase = targetURL.replace(/\/(main|results)\/?$/, '');
+      const resultsURL = `${cleanBase}/results?eventCatId=${catId}`;
+
+      // Validação estrita de 404 sem falsos positivos em menus ou rodapés
+      const isReal404 = (content) => {
+        if (!content) return true;
+        const lower = content.toLowerCase();
+        return lower.includes('404 wipeout') || lower.includes('# 404');
+      };
 
       try {
-        const rawContent = await scrapeSingleUrl(targetCatURL, 'markdown');
-        if (!rawContent) throw new Error("Conteúdo da etapa veio vazio.");
+        const rawContent = await scrapeSingleUrl(resultsURL, 'markdown');
 
-        const lowerRaw = rawContent.toLowerCase();
-
-        // VALIDAÇÃO DE PÁGINAS 404 E MENSAGENS DE ERRO DA WSL
-        if (
-          lowerRaw.includes('404 wipeout') || 
-          lowerRaw.includes("page you're looking for is missing") || 
-          lowerRaw.includes("go home") ||
-          (lowerRaw.includes('404') && lowerRaw.includes('not found'))
-        ) {
-            throw new Error("A WSL ainda não disponibilizou a página de resultados para esta etapa (Erro 404 / Página inexistente).");
+        if (isReal404(rawContent)) {
+          return new Response(JSON.stringify({ 
+            sucesso: false, 
+            mensagem: "A WSL ainda não disponibilizou o chaveamento oficial desta etapa." 
+          }), { status: 200, headers: corsHeaders });
         }
 
         const cleanLines = rawContent
@@ -129,7 +131,6 @@ export default {
         const isJunkLine = (s) => {
           if (!s || s.length < 2 || s.length > 40) return true;
           const l = s.toLowerCase();
-          if (l.includes("page you're looking for") || l.includes("go home") || l === '404' || l === 'wipeout') return true;
           if (/^heat\s*\d+/i.test(l)) return true;
           if (/^r[1-9]\s*heat\s*\d+/i.test(l)) return true;
           if (/^qf\s*heat\s*\d+/i.test(l)) return true;
@@ -178,12 +179,13 @@ export default {
           let m;
           if (lineLower === 'final' || lineLower === 'grand final') {
               activeRound = 'final'; activeHeatIdx = 0;
-          } else if ((m = lineLower.match(/^qf\s*heat\s*(\d+)/))) {
+          } else if ((m = lineLower.match(/^(?:qf|quarterfinal|quarterfinals)\s*heat\s*(\d+)/))) {
               activeRound = 'qf'; activeHeatIdx = parseInt(m[1]) - 1;
-          } else if ((m = lineLower.match(/^sf\s*heat\s*(\d+)/))) {
+          } else if ((m = lineLower.match(/^(?:sf|semifinal|semifinals)\s*heat\s*(\d+)/))) {
               activeRound = 'sf'; activeHeatIdx = parseInt(m[1]) - 1;
-          } else if ((m = lineLower.match(/^r(\d+)\s*heat\s*(\d+)/))) {
-              activeRound = 'r' + m[1]; activeHeatIdx = parseInt(m[2]) - 1;
+          } else if ((m = lineLower.match(/^(?:r\d+|round\s*\d+)\s*heat\s*(\d+)/))) {
+              const rNum = lineLower.match(/\d+/)[0];
+              activeRound = 'r' + rNum; activeHeatIdx = parseInt(m[1]) - 1;
           } else if ((m = lineLower.match(/^heat\s*(\d+)/))) {
               activeRound = 'r1'; activeHeatIdx = parseInt(m[1]) - 1;
           }
@@ -235,14 +237,10 @@ export default {
         let bateriasResponse = catParam === 'feminino' ? finalFeminino : finalMasculino;
         if (bateriasResponse.length === 0) bateriasResponse = (catParam === 'feminino') ? finalMasculino.slice(-23) : finalMasculino;
 
-        if (bateriasResponse.length === 0) {
-            throw new Error("Chaveamento indisponível na WSL para esta categoria.");
-        }
-
         return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
 
       } catch (err) {
-        return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 200, headers: corsHeaders });
       }
     }
 
