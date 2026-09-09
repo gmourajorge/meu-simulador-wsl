@@ -18,7 +18,7 @@ export default {
       "Content-Type": "application/json"
     };
 
-    // Função de raspagem unificada (Exibe o erro real gerado pelo Anakin)
+    // Função de raspagem unificada (Aumentado de 25s para 40s de tolerância)
     const scrapeSingleUrl = async (fetchUrl, format = "markdown") => {
       const submitRes = await fetch("https://api.anakin.io/v1/url-scraper", {
         method: "POST",
@@ -36,7 +36,8 @@ export default {
       if (!jobId) throw new Error("Anakin.io falhou ao gerar o ID do Job.");
 
       let attempts = 0;
-      while (attempts < 25) {
+      // AUMENTO DO TEMPO DE ESPERA PARA 40 TENTATIVAS (40 Segundos)
+      while (attempts < 40) {
         await new Promise(r => setTimeout(r, 1000));
         attempts++;
 
@@ -50,7 +51,7 @@ export default {
           }
         }
       }
-      throw new Error("Timeout: Anakin.io demorou mais de 25 segundos para responder.");
+      throw new Error("Timeout: A WSL demorou muito na tela de proteção. O Anakin aguardou por 40 segundos e abortou.");
     };
 
     // =========================================================================
@@ -72,11 +73,8 @@ export default {
           const eventId = match[1];
           const slug = match[2];
 
-          // Filtra slugs inúteis do menu e impede duplicações
           if (!seenIds.has(eventId) && !['main', 'results', 'watch', 'standings'].includes(slug)) {
             seenIds.add(eventId);
-
-            // Formata o slug "rip-curl-pro" para "Rip Curl Pro"
             const formattedName = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
             eventsFound.push({
@@ -96,7 +94,6 @@ export default {
         return new Response(JSON.stringify({ sucesso: true, quantidade: eventsFound.length, eventos: eventsFound }), { headers: corsHeaders });
 
       } catch (err) {
-        // Envia a mensagem exata do erro ocorrido
         return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 500, headers: corsHeaders });
       }
     }
