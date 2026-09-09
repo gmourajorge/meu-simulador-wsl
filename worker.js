@@ -52,7 +52,9 @@ export default {
       throw new Error("Timeout: A WSL demorou mais de 20s na validação do Cloudflare.");
     };
 
+    // =========================================================================
     // 1. Calendário (/api-events)
+    // =========================================================================
     if (url.pathname === '/api-events') {
       try {
         const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
@@ -88,7 +90,9 @@ export default {
       }
     }
 
-    // 2. Resultados Dinâmicos (/api-wsl)
+    // =========================================================================
+    // 2. Resultados Dinâmicos (/api-wsl) - PARSER ORIENTADO A CONTEXTO
+    // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
       if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' obrigatório." }), { status: 400, headers: corsHeaders });
@@ -115,123 +119,121 @@ export default {
           }), { status: 200, headers: corsHeaders });
         }
 
+        // Limpa lixo de formatação e remove todos os links para anular botões como [Details] e [Replay]
         const cleanLines = rawContent
           .replace(/<[^>]+>/g, '\n')
           .replace(/\|/g, '\n')
           .replace(/[*_#`~]/g, '')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '')
           .replace(/\r\n|\r/g, '\n')
           .split('\n')
           .map(l => l.trim())
           .filter(l => l.length > 0);
 
         const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) >= 0;
-        
-        const isJunkLine = (s) => {
-          if (!s || s.length < 2 || s.length > 40) return true;
-          const l = s.toLowerCase();
-
-          // Filtra nomes e marcas de etapas do CT para não confundir com nomes de atletas
-          const eventKeywords = ['rip curl', 'bells beach', 'gold coast', 'margaret river', 'corona cero', 'el salvador', 'rio pro', 'tahiti', 'fiji', 'trestles', 'portugal', 'philippines', 'pipe masters', 'championship tour', 'world surf league', 'presented by', 'bonsoy', 'vivo', 'lexus', 'outerknown', 'surf city', 'meo'];
-          if (eventKeywords.some(k => l.includes(k))) return true;
-
-          if (/^heat\s*\d+/i.test(l)) return true;
-          if (/^r[1-9]\s*heat\s*\d+/i.test(l)) return true;
-          if (/^qf\s*heat\s*\d+/i.test(l)) return true;
-          if (/^sf\s*heat\s*\d+/i.test(l)) return true;
-          if (/^final/i.test(l)) return true;
-          if (l.includes('waves') || l.includes('wave')) return true;
-          if (l.includes('+')) return true;
-          if (l === '––' || l === '-' || l === '–') return true;
-
-          const bad = ['winner', 'adv.', 'advancing', 'picks', 'fan', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'champions', 'analyzer', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'seed', 'event', 'tourism', 'airways', 'resort', 'surfline'];
-          return bad.some(b => l === b || l.startsWith(b + ' '));
-        };
 
         const heatsMasculino = [];
         const heatsFeminino = [];
         let activeCategory = 'masculino';
 
-        let currentP1 = null, currentS1 = null, currentP2 = null, currentS2 = null;
-        let activeRound = 'r1', activeHeatIdx = 0;
-        let heatMeta = { round: 'r1', heatIdx: 0 };
+        // Variáveis de Estado (Contexto)
+        let currentRound = null;
+        let currentHeatIdx = null;
+        let p1 = null, s1 = null, p2 = null, s2 = null;
 
-        const processHeat = () => {
-           // Impede a criação de baterias se os atletas forem nulos ou tiverem o mesmo nome
-           if (currentP1 && currentP2 && currentP1.toLowerCase() !== currentP2.toLowerCase()) {
-               let winner = null;
-               if (currentS1 !== null && currentS2 !== null) {
-                   if (currentS1 > currentS2) winner = currentP1;
-                   else if (currentS2 > currentS1) winner = currentP2;
-               }
-               const heatObj = { 
-                 p1: currentP1, p2: currentP2, 
-                 score1: currentS1, score2: currentS2, 
-                 winner, 
-                 round: heatMeta.round, heatIdx: heatMeta.heatIdx 
-               };
-               if (activeCategory === 'masculino') heatsMasculino.push(heatObj);
-               else heatsFeminino.push(heatObj);
-           }
-           currentP1 = null; currentS1 = null; currentP2 = null; currentS2 = null;
+        const saveHeat = () => {
+            if (currentRound && p1 && p2 && p1.toLowerCase() !== p2.toLowerCase()) {
+                let winner = null;
+                if (s1 !== null && s2 !== null) {
+                    if (s1 > s2) winner = p1;
+                    else if (s2 > s1) winner = p2;
+                }
+                const heatObj = { p1, p2, score1: s1, score2: s2, winner, round: currentRound, heatIdx: currentHeatIdx };
+                if (activeCategory === 'masculino') heatsMasculino.push(heatObj);
+                else heatsFeminino.push(heatObj);
+            }
+            p1 = null; s1 = null; p2 = null; s2 = null;
         };
 
         for (let i = 0; i < cleanLines.length; i++) {
           const line = cleanLines[i];
-          const lineLower = line.toLowerCase();
+          const l = line.toLowerCase();
           
-          if (lineLower.includes("women's") || lineLower.includes("womens")) activeCategory = 'feminino';
-
-          let m;
-          if (lineLower === 'final' || lineLower === 'grand final') {
-              activeRound = 'final'; activeHeatIdx = 0;
-          } else if ((m = lineLower.match(/^(?:qf|quarterfinal|quarterfinals)\s*heat\s*(\d+)/))) {
-              activeRound = 'qf'; activeHeatIdx = parseInt(m[1]) - 1;
-          } else if ((m = lineLower.match(/^(?:sf|semifinal|semifinals)\s*heat\s*(\d+)/))) {
-              activeRound = 'sf'; activeHeatIdx = parseInt(m[1]) - 1;
-          } else if ((m = lineLower.match(/^(?:r\d+|round\s*\d+)\s*heat\s*(\d+)/))) {
-              const rNum = lineLower.match(/\d+/)[0];
-              activeRound = 'r' + rNum; activeHeatIdx = parseInt(m[1]) - 1;
-          } else if ((m = lineLower.match(/^heat\s*(\d+)/))) {
-              activeRound = 'r1'; activeHeatIdx = parseInt(m[1]) - 1;
+          // Mudança de Categoria: Reseta o estado para garantir que não puxe lixo na transição
+          if (l.includes("women's") || l.includes("womens")) {
+              saveHeat();
+              activeCategory = 'feminino';
+              currentRound = null; 
+              continue;
           }
 
+          // Identificação Estrita de Cabeçalho (Ativa o Contexto)
+          let m;
+          let isHeader = false;
+          if (l === 'final' || l === 'grand final') {
+              saveHeat(); currentRound = 'final'; currentHeatIdx = 0; isHeader = true;
+          } else if ((m = l.match(/^(?:qf|quarterfinal|quarterfinals)\s*heat\s*(\d+)/))) {
+              saveHeat(); currentRound = 'qf'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+          } else if ((m = l.match(/^(?:sf|semifinal|semifinals)\s*heat\s*(\d+)/))) {
+              saveHeat(); currentRound = 'sf'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+          } else if ((m = l.match(/^(?:r\d+|round\s*\d+)\s*heat\s*(\d+)/))) {
+              saveHeat(); const rNum = l.match(/\d+/)[0]; currentRound = 'r' + rNum; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+          } else if ((m = l.match(/^heat\s*(\d+)/))) {
+              saveHeat(); currentRound = 'r1'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+          }
+
+          if (isHeader) continue;
+
+          // REGRA DE OURO: Se não encontrou nenhum cabeçalho válido ainda, ignore a linha!
+          if (!currentRound) continue;
+
+          // Ignora lixo interno estrutural que aparece dentro do bloco da bateria
+          if (l.includes('winner adv') || l.includes('picks') || l.includes('fan') ||
+              l === '––' || l === '-' || l === '–' ||
+              l.includes('no waves') || l.includes('waves') || l.includes('wave') ||
+              l.includes('+') || l.includes('seed')) {
+              continue;
+          }
+
+          // Processamento de Notas
           if (isScore(line)) {
-              if (currentP1 && currentS1 === null) currentS1 = parseFloat(line);
-              else if (currentP2 && currentS2 === null) currentS2 = parseFloat(line);
-          } else if (!isJunkLine(line)) {
-              let isDuplicate = false;
-              if (currentP1 && currentS1 === null && lineLower.endsWith(currentP1.split(' ').pop().toLowerCase()) && line.length > currentP1.length) {
-                  currentP1 = line; isDuplicate = true;
-              } else if (currentP2 && currentS2 === null && lineLower.endsWith(currentP2.split(' ').pop().toLowerCase()) && line.length > currentP2.length) {
-                  currentP2 = line; isDuplicate = true;
+              if (p1 && !p2 && s1 === null) s1 = parseFloat(line);
+              else if (p1 && p2 && s2 === null) s2 = parseFloat(line);
+              continue;
+          }
+
+          // Processamento de Nomes (Apenas se a linha tiver o tamanho coerente com nomes)
+          if (line.length > 1 && line.length < 40 && !/[\d]/.test(line)) {
+              let isExpansion = false;
+              // Detecta se a linha atual é a versão longa da linha anterior (L. Thompson -> Luke Thompson)
+              if (p1 && s1 === null && l.endsWith(p1.split(' ').pop().toLowerCase()) && line.length > p1.length) {
+                  p1 = line; isExpansion = true;
+              } else if (p2 && s2 === null && l.endsWith(p2.split(' ').pop().toLowerCase()) && line.length > p2.length) {
+                  p2 = line; isExpansion = true;
               }
 
-              if (!isDuplicate) {
-                  if (!currentP1) {
-                      currentP1 = line;
-                      heatMeta = { round: activeRound, heatIdx: activeHeatIdx }; 
-                  } else if (!currentP2) {
-                      currentP2 = line;
-                  } else {
-                      processHeat();
-                      currentP1 = line;
-                      heatMeta = { round: activeRound, heatIdx: activeHeatIdx };
+              if (!isExpansion) {
+                  if (!p1) p1 = line;
+                  else if (!p2) p2 = line;
+                  else {
+                      // Se um terceiro nome apareceu, a bateria encerrou e o cabeçalho falhou. Salva e inicia nova.
+                      saveHeat();
+                      p1 = line;
                   }
               }
           }
         }
-        processHeat(); 
+        saveHeat(); // Garante o salvamento da última bateria em memória
 
+        // Deduplicação final por coordenadas
         const deduplicate = (arr) => {
             const unicosMap = new Map();
             arr.forEach(h => {
-              if (h.p1.toLowerCase().includes('seed') || h.p2.toLowerCase().includes('seed')) return;
               const k = `${h.round}-${h.heatIdx}`; 
               if (!unicosMap.has(k)) {
                   unicosMap.set(k, h);
               } else if (unicosMap.get(k).score1 === null && h.score1 !== null) {
-                  unicosMap.set(k, h); 
+                  unicosMap.set(k, h); // Substitui a versão "Aguardando" por uma com notas reais
               }
             });
             return Array.from(unicosMap.values());
@@ -242,6 +244,10 @@ export default {
 
         let bateriasResponse = catParam === 'feminino' ? finalFeminino : finalMasculino;
         if (bateriasResponse.length === 0) bateriasResponse = (catParam === 'feminino') ? finalMasculino.slice(-23) : finalMasculino;
+
+        if (bateriasResponse.length === 0) {
+            throw new Error("Chaveamento indisponível na WSL para esta categoria.");
+        }
 
         return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
 
