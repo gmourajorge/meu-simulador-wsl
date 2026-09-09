@@ -99,7 +99,6 @@ export default {
       const cleanBase = targetURL.replace(/\/(main|results)\/?$/, '');
       const resultsURL = `${cleanBase}/results?eventCatId=${catId}`;
 
-      // Validação estrita de 404 sem falsos positivos em menus ou rodapés
       const isReal404 = (content) => {
         if (!content) return true;
         const lower = content.toLowerCase();
@@ -131,6 +130,11 @@ export default {
         const isJunkLine = (s) => {
           if (!s || s.length < 2 || s.length > 40) return true;
           const l = s.toLowerCase();
+
+          // Filtra nomes e marcas de etapas do CT para não confundir com nomes de atletas
+          const eventKeywords = ['rip curl', 'bells beach', 'gold coast', 'margaret river', 'corona cero', 'el salvador', 'rio pro', 'tahiti', 'fiji', 'trestles', 'portugal', 'philippines', 'pipe masters', 'championship tour', 'world surf league', 'presented by', 'bonsoy', 'vivo', 'lexus', 'outerknown', 'surf city', 'meo'];
+          if (eventKeywords.some(k => l.includes(k))) return true;
+
           if (/^heat\s*\d+/i.test(l)) return true;
           if (/^r[1-9]\s*heat\s*\d+/i.test(l)) return true;
           if (/^qf\s*heat\s*\d+/i.test(l)) return true;
@@ -139,6 +143,7 @@ export default {
           if (l.includes('waves') || l.includes('wave')) return true;
           if (l.includes('+')) return true;
           if (l === '––' || l === '-' || l === '–') return true;
+
           const bad = ['winner', 'adv.', 'advancing', 'picks', 'fan', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'champions', 'analyzer', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'seed', 'event', 'tourism', 'airways', 'resort', 'surfline'];
           return bad.some(b => l === b || l.startsWith(b + ' '));
         };
@@ -152,7 +157,8 @@ export default {
         let heatMeta = { round: 'r1', heatIdx: 0 };
 
         const processHeat = () => {
-           if (currentP1 && currentP2) {
+           // Impede a criação de baterias se os atletas forem nulos ou tiverem o mesmo nome
+           if (currentP1 && currentP2 && currentP1.toLowerCase() !== currentP2.toLowerCase()) {
                let winner = null;
                if (currentS1 !== null && currentS2 !== null) {
                    if (currentS1 > currentS2) winner = currentP1;
