@@ -235,13 +235,18 @@
         function renderErrorUI(mensagem) {
             const container = document.getElementById('bracketContainer');
             container.innerHTML = `
-                <div style="background: #ffffff; border: 1px solid #ef4444; border-radius: 8px; padding: 24px; max-width: 480px; margin: 40px auto; text-align: center; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);">
-                    <div style="font-size: 2rem; margin-bottom: 8px;">📡</div>
-                    <h3 style="color: #ef4444; font-size: 1.1rem; margin-bottom: 8px; font-weight: 800;">FALHA NA CONEXÃO WSL</h3>
-                    <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5; margin-bottom: 16px;">${escapeHTML(mensagem)}</p>
-                    <button onclick="initApp()" style="background: #0284c7; color: #ffffff; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 0.8rem; text-transform: uppercase;">
-                        🔄 Tentar Novamente
-                    </button>
+                <div style="background: var(--wsl-card-bg); border: 1px solid var(--wsl-border-light); border-radius: 8px; padding: 24px; max-width: 480px; margin: 40px auto; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    <div style="font-size: 2.5rem; margin-bottom: 12px;">📡</div>
+                    <h3 style="color: var(--wsl-text-dark); font-size: 1.1rem; margin-bottom: 8px; font-weight: 800;">FALHA NA CONEXÃO WSL</h3>
+                    <p style="color: var(--wsl-red); font-size: 0.85rem; line-height: 1.5; margin-bottom: 20px; font-weight: 600;">
+                        Motivo: ${escapeHTML(mensagem)}
+                    </p>
+                    <div style="display: flex; justify-content: center;">
+                        <button onclick="initApp()" class="btn-sync-wsl" style="padding: 8px 16px; font-size: 0.8rem;">
+                            <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25"/><path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-linecap="round"/></svg>
+                            Tentar Novamente
+                        </button>
+                    </div>
                 </div>
             `;
         }
