@@ -52,9 +52,7 @@ export default {
       throw new Error("Timeout: A WSL demorou mais de 20s na validação do Cloudflare.");
     };
 
-    // =========================================================================
     // 1. Calendário (/api-events)
-    // =========================================================================
     if (url.pathname === '/api-events') {
       try {
         const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
@@ -90,9 +88,7 @@ export default {
       }
     }
 
-    // =========================================================================
-    // 2. Resultados Dinâmicos (/api-wsl) - STATE MACHINE COM COORDENADAS
-    // =========================================================================
+    // 2. Resultados Dinâmicos (/api-wsl)
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
       if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' obrigatório." }), { status: 400, headers: corsHeaders });
@@ -106,10 +102,16 @@ export default {
         const rawContent = await scrapeSingleUrl(targetCatURL, 'markdown');
         if (!rawContent) throw new Error("Conteúdo da etapa veio vazio.");
 
-        // === TRAVA DE 404 DA WSL ===
-        // Se a WSL exibir a página "404 WIPEOUT", a aba de resultados ainda não existe.
-        if (rawContent.toLowerCase().includes('404 wipeout') || (rawContent.includes('404') && rawContent.toLowerCase().includes('not found'))) {
-            throw new Error("A WSL ainda não disponibilizou as chaves para esta etapa (Erro 404 - Wipeout).");
+        const lowerRaw = rawContent.toLowerCase();
+
+        // VALIDAÇÃO DE PÁGINAS 404 E MENSAGENS DE ERRO DA WSL
+        if (
+          lowerRaw.includes('404 wipeout') || 
+          lowerRaw.includes("page you're looking for is missing") || 
+          lowerRaw.includes("go home") ||
+          (lowerRaw.includes('404') && lowerRaw.includes('not found'))
+        ) {
+            throw new Error("A WSL ainda não disponibilizou a página de resultados para esta etapa (Erro 404 / Página inexistente).");
         }
 
         const cleanLines = rawContent
@@ -125,9 +127,9 @@ export default {
         const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) >= 0;
         
         const isJunkLine = (s) => {
-          // A regra rejeita números isolados (como '404') e a palavra 'Wipeout' para segurança extra
-          if (!s || s.length < 2 || s.length > 40 || s === '404' || s.toLowerCase() === 'wipeout') return true;
+          if (!s || s.length < 2 || s.length > 40) return true;
           const l = s.toLowerCase();
+          if (l.includes("page you're looking for") || l.includes("go home") || l === '404' || l === 'wipeout') return true;
           if (/^heat\s*\d+/i.test(l)) return true;
           if (/^r[1-9]\s*heat\s*\d+/i.test(l)) return true;
           if (/^qf\s*heat\s*\d+/i.test(l)) return true;
@@ -232,9 +234,9 @@ export default {
 
         let bateriasResponse = catParam === 'feminino' ? finalFeminino : finalMasculino;
         if (bateriasResponse.length === 0) bateriasResponse = (catParam === 'feminino') ? finalMasculino.slice(-23) : finalMasculino;
-        
+
         if (bateriasResponse.length === 0) {
-            throw new Error("Nenhum atleta ou chave encontrada no site da WSL. O chaveamento ainda não está disponível.");
+            throw new Error("Chaveamento indisponível na WSL para esta categoria.");
         }
 
         return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
