@@ -52,145 +52,191 @@ export default {
       throw new Error("Timeout: A WSL demorou mais de 20s na validação do Cloudflare.");
     };
 
+    // =========================================================================
+    // ENDPOINT 1: Calendário Oficial CT 2026 (/api-events)
+    // =========================================================================
     if (url.pathname === '/api-events') {
       try {
-        const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
-        if (!content) throw new Error("A página do calendário veio vazia.");
+        const markdown = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'markdown');
+        if (!markdown) throw new Error("A página do calendário veio vazia.");
 
-        const eventRegex = /\/events\/2026\/ct\/(\d+)\/([^/'"?\s>#]+)/gi;
+        const eventRegex = /\[([^\]]+)\]\(https:\/\/www\.worldsurfleague\.com\/events\/2026\/ct\/(\d+)\/([^/]+)\/(?:main|results)\)/gi;
         const eventsFound = [];
         const seenIds = new Set();
         let match;
 
-        while ((match = eventRegex.exec(content)) !== null) {
-          const eventId = match[1];
-          const slug = match[2];
+        while ((match = eventRegex.exec(markdown)) !== null) {
+          let rawName = match[1]
+            .replace(/\\\n/g, ' ')
+            .replace(/\n/g, ' ')
+            .replace(/\s*Presented By.*/gi, '')
+            .trim();
+          
+          const eventId = match[2];
+          const slug = match[3];
 
-          if (!seenIds.has(eventId) && !['main', 'results', 'watch', 'standings'].includes(slug)) {
+          if (!seenIds.has(eventId)) {
             seenIds.add(eventId);
-            const formattedName = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-
             eventsFound.push({
               id: `${slug}-${eventId}`,
               wslUrl: `https://www.worldsurfleague.com/events/2026/ct/${eventId}/${slug}/results`,
-              name: `${eventsFound.length + 1}. ${formattedName}`,
+              name: rawName,
               eventId: eventId,
               slug: slug
             });
           }
         }
 
-        if (eventsFound.length === 0) throw new Error("Nenhum link de etapa CT localizado.");
-        return new Response(JSON.stringify({ sucesso: true, quantidade: eventsFound.length, eventos: eventsFound }), { headers: corsHeaders });
+        // Inclusão dinâmica do Philippines Pro caso esteja sem link no markdown oficial
+        if (!seenIds.has('444') && markdown.toLowerCase().includes('philippines pro')) {
+          eventsFound.splice(10, 0, {
+            id: "philippines-pro-444",
+            wslUrl: "https://www.worldsurfleague.com/events/2026/ct/444/philippines-pro/results",
+            name: "Philippines Pro",
+            eventId: "444",
+            slug: "philippines-pro"
+          });
+        }
+
+        const eventosFormatados = eventsFound.map((ev, idx) => ({
+          ...ev,
+          name: `${idx + 1}. ${ev.name}`
+        }));
+
+        return new Response(JSON.stringify({
+          sucesso: true,
+          quantidade: eventosFormatados.length,
+          eventos: eventosFormatados
+        }), { headers: corsHeaders });
+
       } catch (err) {
         return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 500, headers: corsHeaders });
       }
     }
 
+    // =========================================================================
+    // ENDPOINT 2: Leitor de Baterias (/api-wsl) - Suporta Eventos Passados e Futuros
+    // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
       if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' obrigatório." }), { status: 400, headers: corsHeaders });
 
       const catParam = url.searchParams.get('cat') || 'masculino';
       const catId = catParam === 'feminino' ? '2' : '1';
-      targetURL = targetURL.replace(/\/main\/?$/, '') + '/results';
-      const targetCatURL = `${targetURL.split('?')[0]}?eventCatId=${catId}`;
+      
+      if (!targetURL.endsWith('/results') && !targetURL.includes('/results?')) {
+        targetURL = targetURL.replace(/\/main\/?$/, '') + '/results';
+      }
+
+      const baseUrl = targetURL.split('?')[0];
+      const targetCatURL = `${baseUrl}?eventCatId=${catId}`;
 
       try {
-        let rawContent = await scrapeSingleUrl(targetCatURL, 'markdown');
-        if (!rawContent) throw new Error("Conteúdo da etapa veio vazio.");
+        const fullMarkdown = await scrapeSingleUrl(targetCatURL, 'markdown');
+        if (!fullMarkdown) throw new Error("Conteúdo da etapa veio vazio.");
 
-        // Normalização universal: Converte tabelas Markdown (|) e HTML (<...>) em linhas individuais
-        const cleanLines = rawContent
-          .replace(/<[^>]+>/g, '\n')
-          .replace(/\|/g, '\n')
-          .replace(/[*_#`~]/g, '')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-          .replace(/\d+\s*waves/gi, '')
-          .replace(/\d{1,2}\.\d{1,2}\s*\+\s*\d{1,2}\.\d{1,2}/g, '')
-          .replace(/Make heat picks|\*Fan picks|Details|Replay|Watch [^\n]+/gi, '')
-          .replace(/\r\n|\r/g, '\n')
-          .split('\n')
-          .map(l => l.trim())
-          .filter(l => l.length > 0);
+        // Função de extração por bloco isolado de bateria (Heat X)
+        const parseHeatBlock = (blockText) => {
+          let text = blockText
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/https?:\/\/\S+/g, '')
+            .replace(/Make heat picks|\*Fan picks|Details|Replay|Watch [^\n]+/gi, '')
+            .replace(/Winner Adv[^\n]*/gi, '')
+            .replace(/No waves yet|No waves|\d+\s*waves/gi, '')
+            .replace(/Results are hidden[^\n]*/gi, '')
+            .replace(/Show results|Hide results/gi, '')
+            .replace(/\r\n|\r/g, '\n');
 
-        const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) >= 0;
-        const isBadName = (s) => {
-          if (!s || s.length < 2 || s.length > 35 || /\d/.test(s)) return true;
-          const bad = ['heat', 'round', 'replay', 'details', 'final', 'quarterfinal', 'semifinal', 'pick', 'picks', 'fan', 'watch', 'result', 'results', 'clear', 'apply', 'show', 'spoiler', 'vs', 'http', 'wave', 'fiji', 'pro', 'event', 'product', 'attribute', 'value', 'description', 'image', 'tourism', 'airways', 'resort', 'island', 'surf', 'surfline', 'corona', 'cero', 'status', 'rank', 'congratulations', 'presented', 'completed', 'pts', 'points', 'total'];
-          return bad.some(b => s.toLowerCase().includes(b));
-        };
+          const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-        const heatsMasculino = [];
-        const heatsFeminino = [];
-        let activeCategory = 'masculino';
+          const isScoreNum = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0;
+          const isJunkLine = (s) => {
+            if (!s || s.length < 2 || s.length > 40) return true;
+            const l = s.toLowerCase();
+            if (/^heat\s*\d+/i.test(l)) return true;
+            if (l === '––' || l === '-' || l === '–') return true;
+            const bad = ['winner', 'adv.', 'advancing', 'picks', 'fan', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'wave', 'waves', 'dawn patrol', 'call', 'upcoming', 'completed', 'champions', 'analyzer', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats'];
+            return bad.some(b => l === b || l.startsWith(b + ' '));
+          };
 
-        for (let i = 0; i < cleanLines.length; i++) {
-          const lineLower = cleanLines[i].toLowerCase();
-          
-          if (lineLower.includes("women's") || lineLower.includes("womens")) {
-              activeCategory = 'feminino';
-          }
-          if (lineLower === 'round 1' || lineLower === 'seeding round' || lineLower === 'opening round') {
-              if (heatsMasculino.length > 10 && activeCategory === 'masculino') {
-                  activeCategory = 'feminino';
-              }
-          }
+          const scores = [];
+          const surferCandidates = [];
 
-          if (isScore(cleanLines[i])) {
-            let p1 = null;
-            for (let b = 1; b <= 5 && (i - b) >= 0; b++) {
-              if (!isBadName(cleanLines[i - b])) { p1 = cleanLines[i - b]; break; }
-            }
-
-            for (let f = 1; f <= 8 && (i + f) < cleanLines.length; f++) {
-              if (isScore(cleanLines[i + f])) {
-                let p2 = null;
-                for (let k = i + 1; k < i + f; k++) {
-                  if (!isBadName(cleanLines[k])) { p2 = cleanLines[k]; break; }
-                }
-
-                if (p1 && p2 && p1 !== p2) {
-                  const score1 = parseFloat(cleanLines[i]);
-                  const score2 = parseFloat(cleanLines[i + f]);
-                  let winner = null;
-                  if (score1 > score2) winner = p1; else if (score2 > score1) winner = p2;
-                  
-                  const obj = { p1, p2, score1, score2, winner };
-                  if (activeCategory === 'masculino') heatsMasculino.push(obj);
-                  else heatsFeminino.push(obj);
-
-                  i = i + f;
-                  break;
-                }
-              }
+          for (const line of lines) {
+            if (isScoreNum(line)) {
+              scores.push(parseFloat(line));
+            } else if (!isJunkLine(line)) {
+              surferCandidates.push(line);
             }
           }
-        }
 
-        const deduplicate = (arr) => {
-            const unicos = [];
-            const keys = new Set();
-            arr.forEach(h => {
-              const k = `${h.p1}-${h.p2}`; const kRev = `${h.p2}-${h.p1}`;
-              if (!keys.has(k) && !keys.has(kRev)) { keys.add(k); unicos.push(h); }
+          // Filtra duplicatas entre nome curto (Ex: L. Thompson) e nome completo (Ex: Luke Thompson)
+          const uniqueNames = [];
+          for (const name of surferCandidates) {
+            const isDuplicate = uniqueNames.some(existing => {
+              if (existing.toLowerCase() === name.toLowerCase()) return true;
+              const lastN = name.split(' ').pop().toLowerCase();
+              const lastE = existing.split(' ').pop().toLowerCase();
+              return lastN === lastE && name.length < existing.length;
             });
-            return unicos;
+
+            if (!isDuplicate) {
+              const shortIdx = uniqueNames.findIndex(existing => {
+                const lastN = name.split(' ').pop().toLowerCase();
+                const lastE = existing.split(' ').pop().toLowerCase();
+                return lastN === lastE && name.length > existing.length;
+              });
+
+              if (shortIdx !== -1) uniqueNames[shortIdx] = name;
+              else uniqueNames.push(name);
+            }
+          }
+
+          if (uniqueNames.length < 2) return null;
+
+          const p1 = uniqueNames[0];
+          const p2 = uniqueNames[1];
+          let score1 = null;
+          let score2 = null;
+          let winner = null;
+
+          if (scores.length >= 2) {
+            score1 = scores[0];
+            score2 = scores[1];
+            if (score1 > score2) winner = p1;
+            else if (score2 > score1) winner = p2;
+          }
+
+          return { p1, p2, score1, score2, winner };
         };
 
-        const finalMasculino = deduplicate(heatsMasculino);
-        const finalFeminino = deduplicate(heatsFeminino);
+        // Divide o Markdown em blocos por "Heat X"
+        const heatBlocks = fullMarkdown.split(/(?:^|\n)(?=Heat\s+\d+\b)/i);
+        const heatsFound = [];
 
-        let bateriasResponse = [];
-        if (catParam === 'feminino') {
-            if (finalFeminino.length > 0) bateriasResponse = finalFeminino;
-            else if (finalMasculino.length > 40) bateriasResponse = finalMasculino.slice(-23); 
-            else bateriasResponse = finalMasculino;
-        } else {
-            bateriasResponse = finalMasculino.length > 0 ? finalMasculino : finalFeminino;
+        for (const block of heatBlocks) {
+          if (!/^Heat\s+\d+/i.test(block.trim())) continue;
+          const parsed = parseHeatBlock(block);
+          if (parsed) heatsFound.push(parsed);
         }
 
-        return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
+        // Deduplicação de baterias
+        const unicos = [];
+        const keys = new Set();
+        heatsFound.forEach(h => {
+          const k = `${h.p1}-${h.p2}`;
+          const kRev = `${h.p2}-${h.p1}`;
+          if (!keys.has(k) && !keys.has(kRev)) {
+            keys.add(k);
+            unicos.push(h);
+          }
+        });
+
+        return new Response(JSON.stringify({
+          sucesso: true,
+          quantidade: unicos.length,
+          baterias: unicos
+        }), { headers: corsHeaders });
 
       } catch (err) {
         return new Response(JSON.stringify({ sucesso: false, mensagem: err.message }), { status: 500, headers: corsHeaders });
