@@ -52,7 +52,9 @@ export default {
       throw new Error("Timeout: A WSL demorou mais de 20s na validação do Cloudflare.");
     };
 
+    // =========================================================================
     // 1. Calendário (/api-events)
+    // =========================================================================
     if (url.pathname === '/api-events') {
       try {
         const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
@@ -88,7 +90,9 @@ export default {
       }
     }
 
-    // 2. Resultados Dinâmicos (/api-wsl)
+    // =========================================================================
+    // 2. Resultados Dinâmicos (/api-wsl) - LEITURA COMPLETA E SEQUENCIAL
+    // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
       if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' obrigatório." }), { status: 400, headers: corsHeaders });
@@ -118,9 +122,17 @@ export default {
         const roundIds = [...new Set([...rawContent.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
         let extraContents = [];
         
+        // Requisições sequenciais (for...of) para evitar Rate Limit na API do Anakin
         if (roundIds.length > 0) {
             const roundUrls = roundIds.slice(0, 3).map(rid => `${resultsURL}&roundId=${rid}`);
-            extraContents = await Promise.all(roundUrls.map(u => scrapeSingleUrl(u, 'markdown').catch(() => '')));
+            for (const u of roundUrls) {
+                try {
+                    const md = await scrapeSingleUrl(u, 'markdown');
+                    extraContents.push(md);
+                } catch (err) {
+                    console.log(`Falha ao carregar aba extra (${u}): ${err.message}`);
+                }
+            }
         }
         
         const fullMarkdown = [rawContent, ...extraContents].join('\n\n');
@@ -162,11 +174,8 @@ export default {
           return bad.some(b => l === b || l.startsWith(b + ' '));
         };
 
-        const heatsMasculino = [];
-        const heatsFeminino = [];
-        let activeCategory = 'masculino';
+        const heats = []; // Matriz única (A categoria já foi travada pela URL)
 
-        // Variáveis corrigidas e padronizadas
         let currentP1 = null, currentS1 = null, currentP2 = null, currentS2 = null;
         let currentRound = null, currentHeatIdx = null; 
         let heatMeta = { round: null, heatIdx: null };
@@ -178,14 +187,12 @@ export default {
                    if (currentS1 > currentS2) winner = currentP1;
                    else if (currentS2 > currentS1) winner = currentP2;
                }
-               const heatObj = { 
+               heats.push({ 
                  p1: currentP1, p2: currentP2, 
                  score1: currentS1, score2: currentS2, 
                  winner, 
                  round: heatMeta.round, heatIdx: heatMeta.heatIdx 
-               };
-               if (activeCategory === 'masculino') heatsMasculino.push(heatObj);
-               else heatsFeminino.push(heatObj);
+               });
            }
            currentP1 = null; currentS1 = null; currentP2 = null; currentS2 = null;
         };
@@ -194,13 +201,6 @@ export default {
           const line = cleanLines[i];
           const l = line.toLowerCase();
           
-          if (l.includes("women's") || l.includes("womens")) {
-              processHeat();
-              activeCategory = 'feminino';
-              currentRound = null;
-              continue;
-          }
-
           let m;
           let isHeader = false;
           if (l === 'final' || l === 'grand final') {
@@ -258,11 +258,7 @@ export default {
             return Array.from(unicosMap.values());
         };
 
-        const finalMasculino = deduplicate(heatsMasculino);
-        const finalFeminino = deduplicate(heatsFeminino);
-
-        let bateriasResponse = catParam === 'feminino' ? finalFeminino : finalMasculino;
-        if (bateriasResponse.length === 0) bateriasResponse = (catParam === 'feminino') ? finalMasculino.slice(-23) : finalMasculino;
+        const bateriasResponse = deduplicate(heats);
 
         if (bateriasResponse.length === 0) {
             throw new Error("Chaveamento indisponível na WSL para esta categoria.");
