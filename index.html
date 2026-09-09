@@ -267,16 +267,16 @@
         }
 
         async function initApp() {
-            const carregou = await cargarCalendarioDinamico();
-            if (!carregou || wslEvents.length === 0) return;
+			const carregou = await cargarCalendarioDinamico();
+			if (!carregou || wslEvents.length === 0) return;
 
-            currentEvent = wslEvents[0];
-            populateSelect();
-            carregarInterfaceEtapa();
-            window.addEventListener('resize', () => requestAnimationFrame(drawSVGLines));
+			currentEvent = wslEvents[0];
+			populateSelect();
+			carregarInterfaceEtapa();
+			window.addEventListener('resize', () => requestAnimationFrame(drawSVGLines));
 
-            startBackgroundSync();
-        }
+			// startBackgroundSync() REVOADO: Não sincroniza mais todas as etapas em lote para economizar créditos.
+		}
 
         async function carregarInterfaceEtapa() {
             const possuiPalpites = carregarPalpitesLocais();
