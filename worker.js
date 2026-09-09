@@ -91,17 +91,15 @@ export default {
     }
 
     // =========================================================================
-    // 2. Resultados Dinâmicos (/api-wsl) 
+    // 2. Resultados Dinâmicos (/api-wsl) - ISOLAMENTO DE GÊNERO VIA statEventId
     // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
       if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' obrigatório." }), { status: 400, headers: corsHeaders });
 
       const catParam = url.searchParams.get('cat') || 'masculino';
-      const catId = catParam === 'feminino' ? '2' : '1';
-      
       const cleanBase = targetURL.replace(/\/(main|results)\/?$/, '');
-      const resultsURL = `${cleanBase}/results?eventCatId=${catId}`;
+      let resultsURL = `${cleanBase}/results`;
 
       const isReal404 = (content) => {
         if (!content) return true;
@@ -110,7 +108,7 @@ export default {
       };
 
       try {
-        const rawContent = await scrapeSingleUrl(resultsURL, 'markdown');
+        let rawContent = await scrapeSingleUrl(resultsURL, 'markdown');
 
         if (isReal404(rawContent)) {
           return new Response(JSON.stringify({ 
@@ -119,11 +117,32 @@ export default {
           }), { status: 200, headers: corsHeaders });
         }
 
+        // --- NAVEGAÇÃO INTELIGENTE DE GÊNERO ---
+        // Identifica o ID único da categoria solicitada para evitar mistura de dados
+        let targetStatId = null;
+        if (catParam === 'feminino') {
+            const match = rawContent.match(/\[Women's Heats[^\]]*\]\([^)]*statEventId=(\d+)[^)]*\)/i);
+            if (match) targetStatId = match[1];
+        } else {
+            const match = rawContent.match(/\[Men's Heats[^\]]*\]\([^)]*statEventId=(\d+)[^)]*\)/i);
+            if (match) targetStatId = match[1];
+        }
+
+        // Se encontrou o ID da categoria correta, recarrega a página forçando a URL exata
+        if (targetStatId) {
+            resultsURL = `${cleanBase}/results?statEventId=${targetStatId}`;
+            rawContent = await scrapeSingleUrl(resultsURL, 'markdown');
+        }
+
+        // --- EXTRAÇÃO DAS ABAS (Rounds, Brackets) ---
         const roundIds = [...new Set([...rawContent.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
         let extraContents = [];
         
         if (roundIds.length > 0) {
-            const roundUrls = roundIds.slice(0, 3).map(rid => `${resultsURL}&roundId=${rid}`);
+            // Repassa o statEventId para as abas filhas para garantir que o gênero não seja resetado!
+            const statParam = targetStatId ? `&statEventId=${targetStatId}` : '';
+            const roundUrls = roundIds.slice(0, 3).map(rid => `${cleanBase}/results?roundId=${rid}${statParam}`);
+            
             for (const u of roundUrls) {
                 try {
                     const md = await scrapeSingleUrl(u, 'markdown');
@@ -139,10 +158,9 @@ export default {
         const cleanLines = fullMarkdown
           .replace(/<[^>]+>/g, '\n')
           .replace(/\|/g, '\n')
-          // Remove agressivamente as variações do link de picks do fantasy da WSL[cite: 1, 2, 3]
           .replace(/make heat picks.*?(fan picks|\*fan picks|\\fan picks|fan)/gi, '')
           .replace(/make heat picks/gi, '')
-          .replace(/[*_#`~\\]/g, '') // Adicionado o escape \
+          .replace(/[*_#`~\\]/g, '')
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
           .replace(/\r\n|\r/g, '\n')
           .split('\n')
@@ -155,7 +173,6 @@ export default {
           if (!s || s.length < 2 || s.length > 40) return true;
           const l = s.toLowerCase();
 
-          // Filtros
           const eventKeywords = ['rip curl', 'bells beach', 'gold coast', 'margaret river', 'corona cero', 'el salvador', 'rio pro', 'tahiti', 'fiji', 'trestles', 'portugal', 'philippines', 'pipe masters', 'championship tour', 'world surf league', 'presented by', 'bonsoy', 'vivo', 'lexus', 'outerknown', 'surf city', 'meo'];
           if (eventKeywords.some(k => l.includes(k))) return true;
 
@@ -172,9 +189,7 @@ export default {
           if (l.includes('waves') || l.includes('wave')) return true;
           if (l.includes('+')) return true;
           if (l === '––' || l === '-' || l === '–') return true;
-
-          // Se sobrou algum resquício de picks
-          if (l.includes('picks') || l.includes('fan')) return true; 
+          if (l.includes('picks') || l.includes('fan')) return true;
 
           const bad = ['winner', 'adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'seed', 'event', 'tourism', 'airways', 'resort', 'surfline'];
           return bad.some(b => l === b || l.startsWith(b + ' '));
@@ -206,7 +221,7 @@ export default {
         for (let i = 0; i < cleanLines.length; i++) {
           const line = cleanLines[i];
           const l = line.toLowerCase();
-          
+
           let m;
           let isHeader = false;
           if (l === 'final' || l === 'grand final') {
@@ -267,7 +282,7 @@ export default {
         const bateriasResponse = deduplicate(heats);
 
         if (bateriasResponse.length === 0) {
-            throw new Error("Chaveamento indisponível na WSL para esta categoria.");
+            throw new Error(`Chaveamento indisponível na WSL para a categoria ${catParam}.`);
         }
 
         return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
