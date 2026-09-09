@@ -119,26 +119,21 @@ export default {
           }), { status: 200, headers: corsHeaders });
         }
 
-        // --- BUSCA DE ABAS ADICIONAIS (Bracket, Round 2, etc.) ---
-        // Identifica no menu do Markdown outras IDs de rodada para extrair
         const roundIds = [...new Set([...rawContent.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
         let extraContents = [];
         
         if (roundIds.length > 0) {
-            // Limita a busca a no máximo 3 abas extras para economizar créditos e evitar loops
             const roundUrls = roundIds.slice(0, 3).map(rid => `${resultsURL}&roundId=${rid}`);
-            // Promise.all executa as chamadas em paralelo (rápido e eficiente)
             extraContents = await Promise.all(roundUrls.map(u => scrapeSingleUrl(u, 'markdown').catch(() => '')));
         }
         
-        // Concatena tudo (Aba principal de R1 + Abas de Brackets)[cite: 1, 2, 3]
         const fullMarkdown = [rawContent, ...extraContents].join('\n\n');
 
         const cleanLines = fullMarkdown
           .replace(/<[^>]+>/g, '\n')
           .replace(/\|/g, '\n')
           .replace(/[*_#`~]/g, '')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Mantém o texto dentro do link, remove a URL[cite: 1, 3]
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
           .replace(/\r\n|\r/g, '\n')
           .split('\n')
           .map(l => l.trim())
@@ -150,15 +145,12 @@ export default {
           if (!s || s.length < 2 || s.length > 40) return true;
           const l = s.toLowerCase();
 
-          // Filtro de títulos de etapas do CT
           const eventKeywords = ['rip curl', 'bells beach', 'gold coast', 'margaret river', 'corona cero', 'el salvador', 'rio pro', 'tahiti', 'fiji', 'trestles', 'portugal', 'philippines', 'pipe masters', 'championship tour', 'world surf league', 'presented by', 'bonsoy', 'vivo', 'lexus', 'outerknown', 'surf city', 'meo'];
           if (eventKeywords.some(k => l.includes(k))) return true;
 
-          // Filtro de botões de navegação da interface WSL[cite: 2, 3]
           const navKeywords = ['prizes', 'heat analyzer', 'champions', 'forecast', 'official gear', 'event guide', 'schedule', 'rankings', 'surfers', 'fantasy', 'one ocean', 'store', 'inspired by', 'surf coast'];
           if (navKeywords.some(k => l.includes(k))) return true;
 
-          // Headers soltos que não acompanham a palavra Heat[cite: 2]
           if (/^round\s*\d+/i.test(l)) return true;
           if (/^(quarterfinal|semifinal)s?/i.test(l)) return true;
           if (/^heat\s*\d+/i.test(l)) return true;
@@ -182,8 +174,8 @@ export default {
         let activeRound = 'r1', activeHeatIdx = 0;
         let heatMeta = { round: 'r1', heatIdx: 0 };
 
+        // Processa e reseta o ciclo para a próxima bateria
         const processHeat = () => {
-           // Protege contra nomes com números (ex: "Seed #36") ou atletas duplicados
            if (currentP1 && currentP2 && currentP1.toLowerCase() !== currentP2.toLowerCase() && !/[\d]/.test(currentP1) && !/[\d]/.test(currentP2)) {
                let winner = null;
                if (currentS1 !== null && currentS2 !== null) {
@@ -207,7 +199,7 @@ export default {
           const l = line.toLowerCase();
           
           if (l.includes("women's") || l.includes("womens")) {
-              saveHeat();
+              processHeat(); // Corrigido
               activeCategory = 'feminino';
               currentRound = null;
               continue;
@@ -216,21 +208,23 @@ export default {
           let m;
           let isHeader = false;
           if (l === 'final' || l === 'grand final') {
-              saveHeat(); activeRound = 'final'; activeHeatIdx = 0; isHeader = true;
+              processHeat(); currentRound = 'final'; currentHeatIdx = 0; isHeader = true;
           } else if ((m = l.match(/^(?:qf|quarterfinal|quarterfinals)\s*heat\s*(\d+)/))) {
-              saveHeat(); activeRound = 'qf'; activeHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+              processHeat(); currentRound = 'qf'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
           } else if ((m = l.match(/^(?:sf|semifinal|semifinals)\s*heat\s*(\d+)/))) {
-              saveHeat(); activeRound = 'sf'; activeHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+              processHeat(); currentRound = 'sf'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
           } else if ((m = l.match(/^(?:r\d+|round\s*\d+)\s*heat\s*(\d+)/))) {
-              saveHeat(); const rNum = l.match(/\d+/)[0]; activeRound = 'r' + rNum; activeHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+              processHeat(); const rNum = l.match(/\d+/)[0]; currentRound = 'r' + rNum; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
           } else if ((m = l.match(/^heat\s*(\d+)/))) {
-              saveHeat(); activeRound = 'r1'; activeHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+              processHeat(); currentRound = 'r1'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
           }
 
           if (isHeader) {
-              heatMeta = { round: activeRound, heatIdx: activeHeatIdx };
+              heatMeta = { round: currentRound, heatIdx: currentHeatIdx };
               continue;
           }
+
+          if (!currentRound) continue;
 
           if (isScore(line)) {
               if (currentP1 && currentS1 === null) currentS1 = parseFloat(line);
