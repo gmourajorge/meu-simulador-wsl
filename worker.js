@@ -106,6 +106,12 @@ export default {
         const rawContent = await scrapeSingleUrl(targetCatURL, 'markdown');
         if (!rawContent) throw new Error("Conteúdo da etapa veio vazio.");
 
+        // === TRAVA DE 404 DA WSL ===
+        // Se a WSL exibir a página "404 WIPEOUT", a aba de resultados ainda não existe.
+        if (rawContent.toLowerCase().includes('404 wipeout') || (rawContent.includes('404') && rawContent.toLowerCase().includes('not found'))) {
+            throw new Error("A WSL ainda não disponibilizou as chaves para esta etapa (Erro 404 - Wipeout).");
+        }
+
         const cleanLines = rawContent
           .replace(/<[^>]+>/g, '\n')
           .replace(/\|/g, '\n')
@@ -119,7 +125,8 @@ export default {
         const isScore = (s) => /^\d{1,2}(\.\d{1,2})?$/.test(s) && parseFloat(s) <= 20.0 && parseFloat(s) >= 0;
         
         const isJunkLine = (s) => {
-          if (!s || s.length < 2 || s.length > 40) return true;
+          // A regra rejeita números isolados (como '404') e a palavra 'Wipeout' para segurança extra
+          if (!s || s.length < 2 || s.length > 40 || s === '404' || s.toLowerCase() === 'wipeout') return true;
           const l = s.toLowerCase();
           if (/^heat\s*\d+/i.test(l)) return true;
           if (/^r[1-9]\s*heat\s*\d+/i.test(l)) return true;
@@ -137,7 +144,6 @@ export default {
         const heatsFeminino = [];
         let activeCategory = 'masculino';
 
-        // Estado do Analisador
         let currentP1 = null, currentS1 = null, currentP2 = null, currentS2 = null;
         let activeRound = 'r1', activeHeatIdx = 0;
         let heatMeta = { round: 'r1', heatIdx: 0 };
@@ -167,7 +173,6 @@ export default {
           
           if (lineLower.includes("women's") || lineLower.includes("womens")) activeCategory = 'feminino';
 
-          // Detecta a Coordenada Exata (Fase e Número da Bateria)
           let m;
           if (lineLower === 'final' || lineLower === 'grand final') {
               activeRound = 'final'; activeHeatIdx = 0;
@@ -195,28 +200,28 @@ export default {
               if (!isDuplicate) {
                   if (!currentP1) {
                       currentP1 = line;
-                      heatMeta = { round: activeRound, heatIdx: activeHeatIdx }; // Congela a coordenada
+                      heatMeta = { round: activeRound, heatIdx: activeHeatIdx }; 
                   } else if (!currentP2) {
                       currentP2 = line;
                   } else {
-                      processHeat(); // Salva bateria concluída e inicia a nova
+                      processHeat();
                       currentP1 = line;
                       heatMeta = { round: activeRound, heatIdx: activeHeatIdx };
                   }
               }
           }
         }
-        processHeat(); // Garante o salvamento da última bateria lida
+        processHeat(); 
 
         const deduplicate = (arr) => {
             const unicosMap = new Map();
             arr.forEach(h => {
               if (h.p1.toLowerCase().includes('seed') || h.p2.toLowerCase().includes('seed')) return;
-              const k = `${h.round}-${h.heatIdx}`; // Agrupa exatamente pela coordenada!
+              const k = `${h.round}-${h.heatIdx}`; 
               if (!unicosMap.has(k)) {
                   unicosMap.set(k, h);
               } else if (unicosMap.get(k).score1 === null && h.score1 !== null) {
-                  unicosMap.set(k, h); // Substitui se achou uma versão com nota
+                  unicosMap.set(k, h); 
               }
             });
             return Array.from(unicosMap.values());
@@ -227,6 +232,10 @@ export default {
 
         let bateriasResponse = catParam === 'feminino' ? finalFeminino : finalMasculino;
         if (bateriasResponse.length === 0) bateriasResponse = (catParam === 'feminino') ? finalMasculino.slice(-23) : finalMasculino;
+        
+        if (bateriasResponse.length === 0) {
+            throw new Error("Nenhum atleta ou chave encontrada no site da WSL. O chaveamento ainda não está disponível.");
+        }
 
         return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
 
