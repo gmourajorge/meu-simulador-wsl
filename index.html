@@ -202,25 +202,48 @@
             return Array.from({ length: count }, (_, i) => ({ id: `h${i + 1}`, p1: 'Aguardando...', p2: 'Aguardando...', winner: null }));
         }
 
+        // ==========================================
+        // CALENDÁRIO COM INTERFACE DE ERRO RESILIENTE
+        // ==========================================
         async function cargarCalendarioDinamico() {
-            showLoading("⏳ Carregando calendário oficial CT 2026...");
+            showLoading("⏳ Conectando à WSL para carregar o calendário...");
             try {
                 const response = await fetch('/api-events');
                 const data = await response.json();
 
-                if (data.sucesso && data.eventos && data.eventos.length > 0) {
-                    wslEvents = data.eventos.map(ev => ({
-                        ...ev,
-                        heats: {
-                            masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
-                            feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
-                        }
-                    }));
-                    return true;
+                if (!data.sucesso || !data.eventos || data.eventos.length === 0) {
+                    renderErrorUI(data.mensagem || "Não foi possível estruturar o calendário remoto.");
+                    return false;
                 }
-            } catch (e) { console.error("Erro calendário:", e); } 
-            finally { hideLoading(); }
-            return false;
+
+                wslEvents = data.eventos.map(ev => ({
+                    ...ev,
+                    heats: {
+                        masculino: { r1: createEmptyHeats(4), r2: createEmptyHeats(16), r3: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
+                        feminino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null }
+                    }
+                }));
+                return true;
+            } catch (e) {
+                renderErrorUI("Erro de conexão ao buscar o calendário oficial da WSL.");
+                return false;
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function renderErrorUI(mensagem) {
+            const container = document.getElementById('bracketContainer');
+            container.innerHTML = `
+                <div style="background: #ffffff; border: 1px solid #ef4444; border-radius: 8px; padding: 24px; max-width: 480px; margin: 40px auto; text-align: center; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);">
+                    <div style="font-size: 2rem; margin-bottom: 8px;">📡</div>
+                    <h3 style="color: #ef4444; font-size: 1.1rem; margin-bottom: 8px; font-weight: 800;">FALHA NA CONEXÃO WSL</h3>
+                    <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5; margin-bottom: 16px;">${escapeHTML(mensagem)}</p>
+                    <button onclick="initApp()" style="background: #0284c7; color: #ffffff; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 0.8rem; text-transform: uppercase;">
+                        🔄 Tentar Novamente
+                    </button>
+                </div>
+            `;
         }
 
         function salvarPalpitesLocal() {
@@ -246,10 +269,7 @@
         // ==========================================
         async function initApp() {
             const carregou = await cargarCalendarioDinamico();
-            if (!carregou || wslEvents.length === 0) {
-                showToast("⚠️ Não foi possível carregar o calendário remoto.");
-                return;
-            }
+            if (!carregou || wslEvents.length === 0) return; // A UI de erro já foi renderizada pelo cargarCalendarioDinamico
 
             currentEvent = wslEvents[0];
             populateSelect();
