@@ -52,9 +52,7 @@ export default {
       throw new Error("Timeout: A WSL demorou mais de 20s na validação do Cloudflare.");
     };
 
-    // =========================================================================
     // 1. Calendário (/api-events)
-    // =========================================================================
     if (url.pathname === '/api-events') {
       try {
         const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
@@ -90,9 +88,7 @@ export default {
       }
     }
 
-    // =========================================================================
-    // 2. Resultados Dinâmicos (/api-wsl) - LEITURA COMPLETA DE ABAS
-    // =========================================================================
+    // 2. Resultados Dinâmicos (/api-wsl)
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
       if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' obrigatório." }), { status: 400, headers: corsHeaders });
@@ -170,11 +166,11 @@ export default {
         const heatsFeminino = [];
         let activeCategory = 'masculino';
 
+        // Variáveis corrigidas e padronizadas
         let currentP1 = null, currentS1 = null, currentP2 = null, currentS2 = null;
-        let activeRound = 'r1', activeHeatIdx = 0;
-        let heatMeta = { round: 'r1', heatIdx: 0 };
+        let currentRound = null, currentHeatIdx = null; 
+        let heatMeta = { round: null, heatIdx: null };
 
-        // Processa e reseta o ciclo para a próxima bateria
         const processHeat = () => {
            if (currentP1 && currentP2 && currentP1.toLowerCase() !== currentP2.toLowerCase() && !/[\d]/.test(currentP1) && !/[\d]/.test(currentP2)) {
                let winner = null;
@@ -199,7 +195,7 @@ export default {
           const l = line.toLowerCase();
           
           if (l.includes("women's") || l.includes("womens")) {
-              processHeat(); // Corrigido
+              processHeat();
               activeCategory = 'feminino';
               currentRound = null;
               continue;
