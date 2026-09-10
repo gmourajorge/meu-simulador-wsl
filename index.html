@@ -376,14 +376,18 @@
         }
 
         async function sincronizarWSLAuto(showUI = true) {
-            if(showUI) showLoading(`⏳ Buscando resultados na WSL (${currentCategory.toUpperCase()})...`);
+            if(showUI) {
+                showLoading(`⏳ Buscando resultados na WSL (${currentCategory.toUpperCase()})...`);
+                // EXCLUI o cache corrompido de salvamentos incorretos
+                localStorage.removeItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
+            }
             try {
                 const response = await fetch(`/api-wsl?url=${encodeURIComponent(currentEvent.wslUrl)}&cat=${currentCategory}`);
                 const data = await response.json();
 
                 if (!data.sucesso || !data.baterias || data.baterias.length === 0) {
                     if (showUI) {
-                        showToast(`⚠️ Baterias não encontradas. Abrindo modo manual...`);
+                        showToast(data.mensagem || `⚠️ Baterias não encontradas. Abrindo modo manual...`);
                         document.getElementById('manualSyncBox').classList.add('active');
                     }
                     return;
