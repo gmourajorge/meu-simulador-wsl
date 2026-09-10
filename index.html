@@ -278,23 +278,31 @@
 			// startBackgroundSync() REVOADO: Não sincroniza mais todas as etapas em lote para economizar créditos.
 		}
 
+        // 1. CARREGAMENTO DE INTERFACE (Resolve o bug da troca de abas MASC/FEM)
         async function carregarInterfaceEtapa() {
-            const possuiPalpites = carregarPalpitesLocais();
+            // Carrega os vencedores que o usuário escolheu
+            carregarPalpitesLocais(); 
+
+            // SEMPRE tenta injetar os nomes dos atletas do Cache da API silenciosamente
+            const backupData = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
+            if (backupData) {
+                aplicarBateriasSincronizadas(JSON.parse(backupData), false, true);
+            }
+
             recalculateCascades();
             renderBanner();
             renderBracket();
 
-            if (!possuiPalpites) {
-                const backupData = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
-                if (backupData) {
-                    aplicarBateriasSincronizadas(JSON.parse(backupData), false);
-                } else {
-                    await sincronizarWSLAuto(true);
-                }
+            // Se após tudo isso, o Round 1 continuar vazio (sem cache e sem palpite), aciona o scraper
+            const catHeats = currentEvent.heats[currentCategory];
+            if (catHeats && catHeats.r1 && catHeats.r1[0] && catHeats.r1[0].p1 === 'Aguardando...') {
+                await sincronizarWSLAuto(true);
             }
         }
 
+        // 2. TROCA DE CATEGORIA LIMPA (Substitui a antiga)
         function switchCategory(cat) {
+            if (currentCategory === cat) return;
             currentCategory = cat;
             document.getElementById('btnMasc').classList.toggle('active', cat === 'masculino');
             document.getElementById('btnFem').classList.toggle('active', cat === 'feminino');
@@ -403,40 +411,27 @@
             }
         }
 
+        // 3. RESET INTELIGENTE ORIENTADO A COORDENADAS (Sem arrays hardcoded!)
         function resetBracketInteligente() {
             const catHeats = currentEvent.heats[currentCategory];
             const backupStr = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
 
+            // A. Limpa todos os vencedores e reseta os nomes por segurança
             Object.values(catHeats).forEach(r => Array.isArray(r) && r.forEach(h => {
                 h.p1 = 'Aguardando...'; h.p2 = 'Aguardando...'; h.winner = null;
             }));
             catHeats.champion = null;
 
+            // B. Preenche cirurgicamente usando as coordenadas extraídas pelo Worker
             if (backupStr) {
                 const baterias = JSON.parse(backupStr);
-                
-                if (currentCategory === 'masculino' && baterias.length === 35) {
-                    for (let i = 0; i < 4; i++) {
-                        catHeats.r1[i].p1 = baterias[i].p1; catHeats.r1[i].p2 = baterias[i].p2;
+                baterias.forEach(ext => {
+                    // Encaixa nos Rounds exatos extraídos (Ex: qf, sf, r1, r2)
+                    if (ext.round && ext.heatIdx !== undefined && catHeats[ext.round] && catHeats[ext.round][ext.heatIdx]) {
+                        catHeats[ext.round][ext.heatIdx].p1 = ext.p1 || 'Aguardando...';
+                        catHeats[ext.round][ext.heatIdx].p2 = ext.p2 || 'Aguardando...';
                     }
-                    const r2Indices = [5,6,7,8,9,10,11,12, 20,21,22,23,24,25,26,27];
-                    r2Indices.forEach((extIdx, sysIdx) => {
-                        catHeats.r2[sysIdx].p1 = baterias[extIdx].p1; catHeats.r2[sysIdx].p2 = baterias[extIdx].p2;
-                    });
-                } else if (currentCategory === 'feminino' && baterias.length === 23) {
-                    for(let i=0; i<6; i++) { catHeats.r1[i].p1 = baterias[i].p1; catHeats.r1[i].p2 = baterias[i].p2; }
-                    catHeats.r1[6].p1 = baterias[21].p1; catHeats.r1[6].p2 = baterias[21].p2;
-                    catHeats.r1[7].p1 = baterias[22].p1; catHeats.r1[7].p2 = baterias[22].p2;
-                } else {
-                    const flatSysHeats = [];
-                    const roundKeys = ['r1', 'r2', 'qf', 'sf', 'final'];
-                    roundKeys.forEach(rk => { if (catHeats[rk]) catHeats[rk].forEach(h => flatSysHeats.push(h)); });
-
-                    const totalToFill = Math.min(baterias.length, flatSysHeats.length);
-                    for (let idx = 0; idx < totalToFill; idx++) {
-                        if(flatSysHeats[idx]) { flatSysHeats[idx].p1 = baterias[idx].p1; flatSysHeats[idx].p2 = baterias[idx].p2; }
-                    }
-                }
+                });
             }
 
             recalculateCascades();
@@ -513,38 +508,7 @@
             if(saveBackup) showToast(`✅ ${totalAtualizadas} baterias carregadas nos locais exatos!`);
         }
 		
-		// Nova função para forçar a leitura do cache ao alternar de aba
-		function carregarCacheDaAbaAtual() {
-			if (!currentEvent || !currentCategory) return;
-			const backup = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
-			if (backup) {
-				try {
-					const baterias = JSON.parse(backup);
-					// Aplica os dados sem salvar por cima (false) e sem exibir popup (true)
-					aplicarBateriasSincronizadas(baterias, false, true);
-				} catch (e) {
-					console.error("Erro ao ler backup local:", e);
-				}
-			}
-		}
-
-		// Associa a função aos botões de alternância de categoria
-		document.addEventListener("DOMContentLoaded", () => {
-			// Certifique-se de que os IDs ou Classes batem com o seu HTML. 
-			// Exemplo comum assumindo botões que alteram o "currentCategory":
-			const btnElements = document.querySelectorAll('.cat-btn, .category-toggle, button'); 
-			
-			btnElements.forEach(btn => {
-				if (btn.innerText.includes('MASC') || btn.innerText.includes('FEM') || btn.innerText.includes('MASCULINO') || btn.innerText.includes('FEMININO')) {
-					btn.addEventListener('click', () => {
-						// Dá um tempinho mínimo para a categoria atualizar no sistema e então puxa o cache
-						setTimeout(carregarCacheDaAbaAtual, 50);
-					});
-				}
-			});
-		});
-
-        function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }
+		function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }
         function resetSingleHeat(round, idx) { currentEvent.heats[currentCategory][round][idx].winner = null; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
         function setWinner(round, heatIdx, slot) { const hd = currentEvent.heats[currentCategory][round][heatIdx]; const name = slot === 1 ? hd.p1 : hd.p2; if(!name || name.includes('Vencedor') || name === 'Aguardando...') return; hd.winner = name; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
 
