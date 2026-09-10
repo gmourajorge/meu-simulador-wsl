@@ -35,7 +35,8 @@ export default {
       if (!jobId) throw new Error("Anakin.io não gerou o ID do job.");
 
       let attempts = 0;
-      while (attempts < 20) {
+      // AUMENTADO DE 20 PARA 45 SEGUNDOS PARA SUPORTAR A VALIDAÇÃO DO CLOUDFLARE DA WSL
+      while (attempts < 45) {
         await new Promise(r => setTimeout(r, 1000));
         attempts++;
 
@@ -49,7 +50,7 @@ export default {
           }
         }
       }
-      throw new Error("Timeout: A WSL demorou mais de 20s na validação.");
+      throw new Error("Timeout: A WSL demorou mais de 45s na validação anti-bot.");
     };
 
     // =========================================================================
@@ -119,7 +120,6 @@ export default {
           }), { status: 200, headers: corsHeaders });
         }
 
-        // --- ABA BRACKET COM GÊNERO TRAVADO ---
         let extraContents = [];
         let targetRounds = [];
         
@@ -131,17 +131,14 @@ export default {
             if (roundIds.length > 0) targetRounds.push(roundIds[0]);
         }
 
-        // Mapeia o ID estrito da categoria lendo o botão da WSL[cite: 3]
         let targetStatId = null;
         const genderRegex = catParam === 'feminino' ? /\[[^\]]*Women's[^\]]*\]\([^)]*statEventId=(\d+)/i : /\[[^\]]*Men's[^\]]*\]\([^)]*statEventId=(\d+)/i;
         const matchStat = rawContent.match(genderRegex);
         if (matchStat) targetStatId = matchStat[1];
 
-        // Cria a trava de gênero para as próximas requisições
         const urlParam = targetStatId ? `statEventId=${targetStatId}` : `eventCatId=${catId}`;
 
         for (const rid of targetRounds) {
-            // A URL do Bracket agora obriga a WSL a enviar o gênero correto
             const u = `${cleanBase}/results?roundId=${rid}&${urlParam}`;
             await new Promise(r => setTimeout(r, 2000));
             const md = await scrapeSingleUrl(u, 'markdown');
