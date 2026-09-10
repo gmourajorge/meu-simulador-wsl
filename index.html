@@ -445,7 +445,7 @@
             showToast("🔄 Chave restaurada! Palpites limpos, mas chaveamento mantido.");
         }
 
-        function aplicarBateriasSincronizadas(baterias, saveBackup = true) {
+        function aplicarBateriasSincronizadas(baterias, saveBackup = true, silent = false) {
             if (!baterias || baterias.length === 0) return;
 
             if (saveBackup) {
@@ -512,6 +512,37 @@
             renderBracket();
             if(saveBackup) showToast(`✅ ${totalAtualizadas} baterias carregadas nos locais exatos!`);
         }
+		
+		// Nova função para forçar a leitura do cache ao alternar de aba
+		function carregarCacheDaAbaAtual() {
+			if (!currentEvent || !currentCategory) return;
+			const backup = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
+			if (backup) {
+				try {
+					const baterias = JSON.parse(backup);
+					// Aplica os dados sem salvar por cima (false) e sem exibir popup (true)
+					aplicarBateriasSincronizadas(baterias, false, true);
+				} catch (e) {
+					console.error("Erro ao ler backup local:", e);
+				}
+			}
+		}
+
+		// Associa a função aos botões de alternância de categoria
+		document.addEventListener("DOMContentLoaded", () => {
+			// Certifique-se de que os IDs ou Classes batem com o seu HTML. 
+			// Exemplo comum assumindo botões que alteram o "currentCategory":
+			const btnElements = document.querySelectorAll('.cat-btn, .category-toggle, button'); 
+			
+			btnElements.forEach(btn => {
+				if (btn.innerText.includes('MASC') || btn.innerText.includes('FEM') || btn.innerText.includes('MASCULINO') || btn.innerText.includes('FEMININO')) {
+					btn.addEventListener('click', () => {
+						// Dá um tempinho mínimo para a categoria atualizar no sistema e então puxa o cache
+						setTimeout(carregarCacheDaAbaAtual, 50);
+					});
+				}
+			});
+		});
 
         function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }
         function resetSingleHeat(round, idx) { currentEvent.heats[currentCategory][round][idx].winner = null; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
