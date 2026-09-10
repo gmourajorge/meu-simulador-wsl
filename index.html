@@ -450,25 +450,29 @@
             const catHeats = currentEvent.heats[currentCategory];
             if (!catHeats) return;
 
-            const getLastName = (name) => {
-                if (!name || name === 'Aguardando...' || name.includes('Vencedor')) return '';
-                const clean = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-                const parts = clean.split(/\s+/);
-                return parts[parts.length - 1];
+            // Função flexível de detecção: compara os últimos nomes e iniciais para garantir a vitória mesmo com nomes curtos
+            const isSameSurfer = (fullName, shortName) => {
+                if(!fullName || !shortName || fullName === 'Aguardando...' || shortName === 'Aguardando...') return false;
+                const fullClean = fullName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                const shortClean = shortName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                const fullParts = fullClean.split(/\s+/);
+                const shortParts = shortClean.split(/\s+/);
+                // Checa o último sobrenome. Ex: "Johnson" em "Bettylou Sakura Johnson" vs "B. Johnson"
+                if(fullParts[fullParts.length - 1] === shortParts[shortParts.length - 1]) return true;
+                return false;
             };
 
             const assignHeat = (sysHeat, ext) => {
                 if (!sysHeat || !ext) return;
-                sysHeat.p1 = ext.p1 || 'Aguardando...';
-                sysHeat.p2 = ext.p2 || 'Aguardando...';
+                
+                // Se o dado vier preenchido e não for lixo, sobrescrevemos o sistema com a realidade da API
+                if(ext.p1 && ext.p1 !== 'Aguardando...') sysHeat.p1 = ext.p1;
+                if(ext.p2 && ext.p2 !== 'Aguardando...') sysHeat.p2 = ext.p2;
                 
                 if (ext.winner) {
-                    const extWinnerLast = getLastName(ext.winner);
-                    if (extWinnerLast) {
-                        if (getLastName(sysHeat.p1) === extWinnerLast) sysHeat.winner = sysHeat.p1;
-                        else if (getLastName(sysHeat.p2) === extWinnerLast) sysHeat.winner = sysHeat.p2;
-                        else sysHeat.winner = ext.winner;
-                    }
+                    if (isSameSurfer(sysHeat.p1, ext.winner)) sysHeat.winner = sysHeat.p1;
+                    else if (isSameSurfer(sysHeat.p2, ext.winner)) sysHeat.winner = sysHeat.p2;
+                    else sysHeat.winner = ext.winner; // Se falhar tudo, joga o nome literal da API
                 } else {
                     sysHeat.winner = null;
                 }
@@ -476,13 +480,8 @@
 
             let totalAtualizadas = 0;
 
-            // Extrai uma lista linear apenas para o fallback (sincronização manual html)
-            let flatSysHeats = [];
-            const roundKeys = ['r1', 'r2', 'r3', 'qf', 'sf', 'final'];
-            roundKeys.forEach(rk => { if (catHeats[rk]) catHeats[rk].forEach(h => flatSysHeats.push(h)); });
-
             baterias.forEach((ext, idx) => {
-                // MAPEAMENTO INTELIGENTE DE COORDENADAS
+                // MAPEAMENTO INTELIGENTE DE COORDENADAS: Sempre prioritário
                 if (ext.round && ext.heatIdx !== undefined && catHeats[ext.round]) {
                     const sysHeat = catHeats[ext.round][ext.heatIdx];
                     if (sysHeat) {
@@ -490,11 +489,8 @@
                         totalAtualizadas++;
                     }
                 } else {
-                    // Fallback para a Extração Manual de HTML (que não envia coordenadas)
-                    if (flatSysHeats[idx]) {
-                        assignHeat(flatSysHeats[idx], ext);
-                        totalAtualizadas++;
-                    }
+                    // Fallback de índice manual - REMOVIDO para impedir injeções corrompidas de lista plana
+                    console.warn("Bateria da API descartada por falta de coordenada válida:", ext);
                 }
             });
 
@@ -503,21 +499,35 @@
             }
 
             currentEvent.defined = true;
+            // Desliga a sobrescrita destrutiva local antes de salvar a renderização da API
+            recalculateCascades(true); // O parâmetro 'true' avisa que estamos em modo API
             salvarPalpitesLocal();
             renderBracket();
-            if(saveBackup) showToast(`✅ ${totalAtualizadas} baterias carregadas nos locais exatos!`);
+            
+            if(saveBackup && !silent) showToast(`✅ ${totalAtualizadas} baterias carregadas com sucesso!`);
         }
 		
-		function updateSlot(heat, slot, val) { heat[slot] = val || 'Aguardando...'; if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; }
-        function resetSingleHeat(round, idx) { currentEvent.heats[currentCategory][round][idx].winner = null; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
+		// === Ajuste a função updateSlot para NUNCA limpar um nome injetado por API ===
+        function updateSlot(heat, slot, val, isApiSync = false) { 
+            // Se for sincronização da API, ignoramos os placeholders "Vencedor R1" para não sujar o nome real.
+            if(isApiSync && heat[slot] && heat[slot] !== 'Aguardando...' && !heat[slot].includes('Vencedor')) {
+                // Se já tem um nome real ali, NÃO mexe, deixa a API comandar.
+                return;
+            }
+            heat[slot] = val || 'Aguardando...'; 
+            if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; 
+        }
+		
+		function resetSingleHeat(round, idx) { currentEvent.heats[currentCategory][round][idx].winner = null; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
         function setWinner(round, heatIdx, slot) { const hd = currentEvent.heats[currentCategory][round][heatIdx]; const name = slot === 1 ? hd.p1 : hd.p2; if(!name || name.includes('Vencedor') || name === 'Aguardando...') return; hd.winner = name; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
 
-        function recalculateCascades() {
+        // === Ajuste do recalculate para modo passivo na sincronização ===
+        function recalculateCascades(isApiSync = false) {
             const cd = currentEvent.heats[currentCategory];
             if(cd.r1) cd.r1.forEach((h, i) => {
                 const w = h.winner;
-                if(currentCategory === 'masculino' && cd.r2 && cd.r2[[8,5,2,12][i]]) updateSlot(cd.r2[[8,5,2,12][i]], 'p2', w ? w : `Vencedor R1 H${i+1}`);
-                if(currentCategory === 'feminino' && cd.r2 && cd.r2[[4,0,2,6,1,7,3,5][i]]) updateSlot(cd.r2[[4,0,2,6,1,7,3,5][i]], 'p2', w ? w : `Vencedora R1 H${i+1}`);
+                if(currentCategory === 'masculino' && cd.r2 && cd.r2[[8,5,2,12][i]]) updateSlot(cd.r2[[8,5,2,12][i]], 'p2', w ? w : `Vencedor R1 H${i+1}`, isApiSync);
+                if(currentCategory === 'feminino' && cd.r2 && cd.r2[[4,0,2,6,1,7,3,5][i]]) updateSlot(cd.r2[[4,0,2,6,1,7,3,5][i]], 'p2', w ? w : `Vencedora R1 H${i+1}`, isApiSync);
             });
             ['r2','r3','qf','sf'].forEach((rnd, step) => {
                 if(!cd[rnd]) return;
@@ -525,7 +535,7 @@
                 if(!cd[nextRnd]) return;
                 cd[rnd].forEach((h, i) => {
                     const w = (h.winner && (h.winner === h.p1 || h.winner === h.p2)) ? h.winner : null;
-                    if(cd[nextRnd][Math.floor(i/2)]) updateSlot(cd[nextRnd][Math.floor(i/2)], i%2===0?'p1':'p2', w);
+                    if(cd[nextRnd][Math.floor(i/2)]) updateSlot(cd[nextRnd][Math.floor(i/2)], i%2===0?'p1':'p2', w, isApiSync);
                 });
             });
             if(cd.final && cd.final[0]) {
