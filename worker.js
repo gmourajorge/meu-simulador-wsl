@@ -27,7 +27,7 @@ export default {
 
       if (!submitRes.ok) {
         const errText = await submitRes.text();
-        throw new Error(`Anakin.io HTTP ${submitRes.status}: ${errText}`);
+        throw new Error(`Anakin.io HTTP ${submitRes.status}: Saldo esgotado ou serviço indisponível.`);
       }
 
       const jobData = await submitRes.json();
@@ -49,7 +49,7 @@ export default {
           }
         }
       }
-      throw new Error("Timeout: A WSL demorou mais de 20s na validação do Cloudflare.");
+      throw new Error("Timeout: A WSL demorou mais de 20s na validação.");
     };
 
     // =========================================================================
@@ -91,15 +91,17 @@ export default {
     }
 
     // =========================================================================
-    // 2. Resultados Dinâmicos (/api-wsl) - ISOLAMENTO DE GÊNERO VIA statEventId
+    // 2. Resultados Dinâmicos (/api-wsl)
     // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
       if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' obrigatório." }), { status: 400, headers: corsHeaders });
 
       const catParam = url.searchParams.get('cat') || 'masculino';
-      const cleanBase = targetURL.replace(/\/(main|results)\/?$/, '');
-      let resultsURL = `${cleanBase}/results`;
+      const catId = catParam === 'feminino' ? '2' : '1';
+      
+      const cleanBase = targetURL.replace(/\/(main|results)\/?(?:[?#].*)?$/, '');
+      const resultsURL = `${cleanBase}/results?eventCatId=${catId}`;
 
       const isReal404 = (content) => {
         if (!content) return true;
@@ -108,7 +110,7 @@ export default {
       };
 
       try {
-        let rawContent = await scrapeSingleUrl(resultsURL, 'markdown');
+        const rawContent = await scrapeSingleUrl(resultsURL, 'markdown');
 
         if (isReal404(rawContent)) {
           return new Response(JSON.stringify({ 
@@ -117,40 +119,27 @@ export default {
           }), { status: 200, headers: corsHeaders });
         }
 
-        // --- NAVEGAÇÃO INTELIGENTE DE GÊNERO ---
-        // Identifica o ID único da categoria solicitada para evitar mistura de dados
-        let targetStatId = null;
-        if (catParam === 'feminino') {
-            const match = rawContent.match(/\[Women's Heats[^\]]*\]\([^)]*statEventId=(\d+)[^)]*\)/i);
-            if (match) targetStatId = match[1];
-        } else {
-            const match = rawContent.match(/\[Men's Heats[^\]]*\]\([^)]*statEventId=(\d+)[^)]*\)/i);
-            if (match) targetStatId = match[1];
-        }
-
-        // Se encontrou o ID da categoria correta, recarrega a página forçando a URL exata
-        if (targetStatId) {
-            resultsURL = `${cleanBase}/results?statEventId=${targetStatId}`;
-            rawContent = await scrapeSingleUrl(resultsURL, 'markdown');
-        }
-
-        // --- EXTRAÇÃO DAS ABAS (Rounds, Brackets) ---
-        const roundIds = [...new Set([...rawContent.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
+        // --- ABA BRACKET: Pausa de segurança e busca direcionada ---
         let extraContents = [];
+        let targetRounds = [];
         
-        if (roundIds.length > 0) {
-            // Repassa o statEventId para as abas filhas para garantir que o gênero não seja resetado!
-            const statParam = targetStatId ? `&statEventId=${targetStatId}` : '';
-            const roundUrls = roundIds.slice(0, 3).map(rid => `${cleanBase}/results?roundId=${rid}${statParam}`);
-            
-            for (const u of roundUrls) {
-                try {
-                    const md = await scrapeSingleUrl(u, 'markdown');
-                    extraContents.push(md);
-                } catch (err) {
-                    console.log(`Falha ao carregar aba extra (${u}): ${err.message}`);
-                }
-            }
+        // Foca diretamente no botão de "Bracket" / "Heat Draw" para não gastar créditos extras
+        const bracketMatch = rawContent.match(/\[(?:Bracket|Heat Draw)[^\]]*\]\([^)]*roundId=(\d+)[^)]*\)/i);
+        if (bracketMatch) {
+            targetRounds.push(bracketMatch[1]);
+        } else {
+            // Fallback genérico caso a palavra Bracket mude
+            const roundIds = [...new Set([...rawContent.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
+            if (roundIds.length > 0) targetRounds.push(roundIds[0]);
+        }
+
+        for (const rid of targetRounds) {
+            const u = `${cleanBase}/results?eventCatId=${catId}&roundId=${rid}`;
+            // PAUSA OBRIGATÓRIA: Impede que o Anakin.io bloqueie a segunda requisição
+            await new Promise(r => setTimeout(r, 2000));
+            // Sem bloco silencioso: Se o limite exceder, ele parará o código para te avisar!
+            const md = await scrapeSingleUrl(u, 'markdown');
+            extraContents.push(md);
         }
         
         const fullMarkdown = [rawContent, ...extraContents].join('\n\n');
@@ -178,6 +167,8 @@ export default {
 
           const navKeywords = ['prizes', 'heat analyzer', 'champions', 'forecast', 'official gear', 'event guide', 'schedule', 'rankings', 'surfers', 'fantasy', 'one ocean', 'store', 'inspired by', 'surf coast'];
           if (navKeywords.some(k => l.includes(k))) return true;
+
+          if (l.includes("men's heats") || l.includes("women's heats")) return true;
 
           if (/^round\s*\d+/i.test(l)) return true;
           if (/^(quarterfinal|semifinal)s?/i.test(l)) return true;
@@ -282,7 +273,7 @@ export default {
         const bateriasResponse = deduplicate(heats);
 
         if (bateriasResponse.length === 0) {
-            throw new Error(`Chaveamento indisponível na WSL para a categoria ${catParam}.`);
+            throw new Error(`Chaveamento indisponível na WSL para a categoria solicitada.`);
         }
 
         return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
