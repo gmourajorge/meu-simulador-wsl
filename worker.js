@@ -35,7 +35,6 @@ export default {
       if (!jobId) throw new Error("Anakin.io não gerou o ID do job.");
 
       let attempts = 0;
-      // AUMENTADO DE 20 PARA 45 SEGUNDOS PARA SUPORTAR A VALIDAÇÃO DO CLOUDFLARE DA WSL
       while (attempts < 45) {
         await new Promise(r => setTimeout(r, 1000));
         attempts++;
@@ -50,7 +49,7 @@ export default {
           }
         }
       }
-      throw new Error("Timeout: A WSL demorou mais de 45s na validação anti-bot.");
+      throw new Error("Timeout: A WSL demorou mais de 45s na validação.");
     };
 
     // =========================================================================
@@ -111,7 +110,7 @@ export default {
       };
 
       try {
-        const rawContent = await scrapeSingleUrl(resultsURL, 'markdown');
+        let rawContent = await scrapeSingleUrl(resultsURL, 'markdown');
 
         if (isReal404(rawContent)) {
           return new Response(JSON.stringify({ 
@@ -120,6 +119,22 @@ export default {
           }), { status: 200, headers: corsHeaders });
         }
 
+        // --- 1. ISOLAMENTO ESTRITO DE GÊNERO (REFETCH OBRIGATÓRIO) ---
+        let targetStatId = null;
+        const genderRegex = catParam === 'feminino' ? /\[[^\]]*Women's[^\]]*\]\([^)]*statEventId=(\d+)/i : /\[[^\]]*Men's[^\]]*\]\([^)]*statEventId=(\d+)/i;
+        const matchStat = rawContent.match(genderRegex);
+        
+        if (matchStat) {
+            targetStatId = matchStat[1];
+            // REFETCH: O site da WSL frequentemente ignora o 'eventCatId=2' na URL inicial e carrega o Masculino.
+            // Recarregamos a base com o 'statEventId' exato. Isso traz o Round 1 do gênero correto
+            // E MAIS IMPORTANTE: Traz os IDs de Bracket específicos desse gênero!
+            const explicitBaseUrl = `${cleanBase}/results?statEventId=${targetStatId}`;
+            await new Promise(r => setTimeout(r, 2000));
+            rawContent = await scrapeSingleUrl(explicitBaseUrl, 'markdown');
+        }
+
+        // --- 2. ABA BRACKET COM GÊNERO TRAVADO ---
         let extraContents = [];
         let targetRounds = [];
         
@@ -128,17 +143,13 @@ export default {
             targetRounds.push(bracketMatch[1]);
         } else {
             const roundIds = [...new Set([...rawContent.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
-            if (roundIds.length > 0) targetRounds.push(roundIds[0]);
+            if (roundIds.length > 0) targetRounds.push(...roundIds.slice(0, 2));
         }
-
-        let targetStatId = null;
-        const genderRegex = catParam === 'feminino' ? /\[[^\]]*Women's[^\]]*\]\([^)]*statEventId=(\d+)/i : /\[[^\]]*Men's[^\]]*\]\([^)]*statEventId=(\d+)/i;
-        const matchStat = rawContent.match(genderRegex);
-        if (matchStat) targetStatId = matchStat[1];
 
         const urlParam = targetStatId ? `statEventId=${targetStatId}` : `eventCatId=${catId}`;
 
         for (const rid of targetRounds) {
+            // A URL do Bracket agora obriga a WSL a enviar o gênero correto
             const u = `${cleanBase}/results?roundId=${rid}&${urlParam}`;
             await new Promise(r => setTimeout(r, 2000));
             const md = await scrapeSingleUrl(u, 'markdown');
