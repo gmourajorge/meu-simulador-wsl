@@ -27,7 +27,13 @@ export default {
 
       if (!submitRes.ok) {
         const errText = await submitRes.text();
-        throw new Error(`Anakin.io HTTP ${submitRes.status}: Saldo esgotado ou servico indisponivel.`);
+        let apiError = errText;
+        try {
+            const jsonError = JSON.parse(errText);
+            apiError = jsonError.message || jsonError.error || errText;
+        } catch(e) {}
+        // Concatenacao tradicional para evitar bugs do chat
+        throw new Error("Anakin (HTTP " + submitRes.status + "): " + apiError + " | URL: " + fetchUrl);
       }
 
       const jobData = await submitRes.json();
@@ -39,7 +45,7 @@ export default {
         await new Promise(r => setTimeout(r, 4000));
         attempts++;
 
-        const pollRes = await fetch(`https://api.anakin.io/v1/url-scraper/${jobId}`, { headers });
+        const pollRes = await fetch("https://api.anakin.io/v1/url-scraper/" + jobId, { headers });
         if (pollRes.ok) {
           const result = await pollRes.json();
           if (result.status === "completed") {
@@ -74,9 +80,9 @@ export default {
             const formattedName = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
             eventsFound.push({
-              id: `\({slug}-\){eventId}`,
-              wslUrl: `https://www.worldsurfleague.com/events/2026/ct/\({eventId}/\){slug}/results`,
-              name: `\({eventsFound.length + 1}.\){formattedName}`,
+              id: slug + "-" + eventId,
+              wslUrl: "https://www.worldsurfleague.com/events/2026/ct/" + eventId + "/" + slug + "/results",
+              name: (eventsFound.length + 1) + ". " + formattedName,
               eventId: eventId,
               slug: slug
             });
@@ -101,7 +107,7 @@ export default {
       const catId = catParam === 'feminino' ? '2' : '1';
       
       const cleanBase = targetURL.replace(/\/(main|results)\/?(?:[?#].*)?$/, '');
-      const resultsURL = `\({cleanBase}/results?eventCatId=\){catId}`;
+      const resultsURL = cleanBase + '/results?eventCatId=' + catId;
 
       const isReal404 = (content) => {
         if (!content) return true;
@@ -121,7 +127,6 @@ export default {
 
         let targetStatId = null;
         
-        // Uso de Hexadecimal para previnir bugs visuais de renderizacao no chat e IDEs
         const regexFeminino = new RegExp("\\x5B[^\\x5D]*Women's[^\\x5D]*\\x5D\\x28[^\\x29]*statEventId=(\\d+)", "i");
         const regexMasculino = new RegExp("\\x5B[^\\x5D]*Men's[^\\x5D]*\\x5D\\x28[^\\x29]*statEventId=(\\d+)", "i");
         
@@ -129,7 +134,7 @@ export default {
         
         if (matchStat) {
             targetStatId = matchStat[1];
-            const explicitBaseUrl = `\({cleanBase}/results?statEventId=\){targetStatId}`;
+            const explicitBaseUrl = cleanBase + "/results?statEventId=" + targetStatId;
             await new Promise(r => setTimeout(r, 2000));
             rawContent = await scrapeSingleUrl(explicitBaseUrl, 'markdown');
         }
@@ -147,10 +152,10 @@ export default {
             if (roundIds.length > 0) targetRounds.push(...roundIds.slice(0, 2));
         }
 
-        const urlParam = targetStatId ? `statEventId=\({targetStatId}` : `eventCatId=\){catId}`;
+        const urlParam = targetStatId ? "statEventId=" + targetStatId : "eventCatId=" + catId;
 
         for (const rid of targetRounds) {
-            const u = `\({cleanBase}/results?roundId=\){rid}&${urlParam}`;
+            const u = cleanBase + "/results?roundId=" + rid + "&" + urlParam;
             await new Promise(r => setTimeout(r, 2000));
             const md = await scrapeSingleUrl(u, 'markdown');
             extraContents.push(md);
@@ -299,7 +304,7 @@ export default {
         const deduplicate = (arr) => {
             const unicosMap = new Map();
             arr.forEach(h => {
-              const k = `\({h.round}-\){h.heatIdx}`; 
+              const k = h.round + "-" + h.heatIdx; 
               if (!unicosMap.has(k)) {
                   unicosMap.set(k, h);
               } else if (unicosMap.get(k).score1 === null && h.score1 !== null) {
@@ -312,7 +317,7 @@ export default {
         const bateriasResponse = deduplicate(heats);
 
         if (bateriasResponse.length === 0) {
-            throw new Error(`Chaveamento indisponivel na WSL para a categoria solicitada.`);
+            throw new Error("Chaveamento indisponivel na WSL para a categoria solicitada.");
         }
 
         return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
