@@ -27,15 +27,14 @@ export default {
 
       if (!submitRes.ok) {
         const errText = await submitRes.text();
-        throw new Error(`Anakin.io HTTP ${submitRes.status}: Saldo esgotado ou serviço indisponível.`);
+        throw new Error(`Anakin.io HTTP ${submitRes.status}: Saldo esgotado ou servico indisponivel.`);
       }
 
       const jobData = await submitRes.json();
       const jobId = jobData.jobId || jobData.id;
-      if (!jobId) throw new Error("Anakin.io não gerou o ID do job.");
+      if (!jobId) throw new Error("Anakin.io nao gerou o ID do job.");
 
       let attempts = 0;
-      // OTIMIZAÇÃO: Checa a cada 4 segundos (máx 12 vezes = 48s) para manter os subrequests baixos no Cloudflare
       while (attempts < 12) {
         await new Promise(r => setTimeout(r, 4000));
         attempts++;
@@ -46,20 +45,20 @@ export default {
           if (result.status === "completed") {
             return result.markdown || result.html || (result.data ? result.data.markdown || result.data.html : "");
           } else if (result.status === "failed") {
-            throw new Error("Falha no servidor do Anakin ao ler a página.");
+            throw new Error("Falha no servidor do Anakin ao ler a pagina.");
           }
         }
       }
-      throw new Error("Timeout: A WSL demorou mais de 45s na validação anti-bot.");
+      throw new Error("Timeout: A WSL demorou mais de 45s na validacao anti-bot.");
     };
 
     // =========================================================================
-    // 1. Calendário (/api-events)
+    // 1. Calendario (/api-events)
     // =========================================================================
     if (url.pathname === '/api-events') {
       try {
         const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
-        if (!content) throw new Error("A página do calendário veio vazia.");
+        if (!content) throw new Error("A pagina do calendario veio vazia.");
 
         const eventRegex = /\/events\/2026\/ct\/(\d+)\/([^/'"?\s>#]+)/gi;
         const eventsFound = [];
@@ -75,9 +74,9 @@ export default {
             const formattedName = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
             eventsFound.push({
-              id: `${slug}-${eventId}`,
-              wslUrl: `https://www.worldsurfleague.com/events/2026/ct/${eventId}/${slug}/results`,
-              name: `${eventsFound.length + 1}. ${formattedName}`,
+              id: `\({slug}-\){eventId}`,
+              wslUrl: `https://www.worldsurfleague.com/events/2026/ct/\({eventId}/\){slug}/results`,
+              name: `\({eventsFound.length + 1}.\){formattedName}`,
               eventId: eventId,
               slug: slug
             });
@@ -92,17 +91,17 @@ export default {
     }
 
     // =========================================================================
-    // 2. Resultados Dinâmicos (/api-wsl)
+    // 2. Resultados Dinamicos (/api-wsl)
     // =========================================================================
     if (url.pathname === '/api-wsl') {
       let targetURL = url.searchParams.get('url');
-      if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parâmetro 'url' obrigatório." }), { status: 400, headers: corsHeaders });
+      if (!targetURL) return new Response(JSON.stringify({ sucesso: false, mensagem: "Parametro 'url' obrigatorio." }), { status: 400, headers: corsHeaders });
 
       const catParam = url.searchParams.get('cat') || 'masculino';
       const catId = catParam === 'feminino' ? '2' : '1';
       
       const cleanBase = targetURL.replace(/\/(main|results)\/?(?:[?#].*)?$/, '');
-      const resultsURL = `${cleanBase}/results?eventCatId=${catId}`;
+      const resultsURL = `\({cleanBase}/results?eventCatId=\){catId}`;
 
       const isReal404 = (content) => {
         if (!content) return true;
@@ -116,17 +115,21 @@ export default {
         if (isReal404(rawContent)) {
           return new Response(JSON.stringify({ 
             sucesso: false, 
-            mensagem: "A WSL ainda não disponibilizou o chaveamento oficial desta etapa." 
+            mensagem: "A WSL ainda nao disponibilizou o chaveamento oficial desta etapa." 
           }), { status: 200, headers: corsHeaders });
         }
 
         let targetStatId = null;
-        const genderRegex = catParam === 'feminino' ? /\[[^\]]*Women's[^\]]*\]\([^)]*statEventId=(\d+)/i : /\[[^\]]*Men's[^\]]*\]\([^)]*statEventId=(\d+)/i;
-        const matchStat = rawContent.match(genderRegex);
+        
+        // Uso de Hexadecimal para previnir bugs visuais de renderizacao no chat e IDEs
+        const regexFeminino = new RegExp("\\x5B[^\\x5D]*Women's[^\\x5D]*\\x5D\\x28[^\\x29]*statEventId=(\\d+)", "i");
+        const regexMasculino = new RegExp("\\x5B[^\\x5D]*Men's[^\\x5D]*\\x5D\\x28[^\\x29]*statEventId=(\\d+)", "i");
+        
+        const matchStat = rawContent.match(catParam === 'feminino' ? regexFeminino : regexMasculino);
         
         if (matchStat) {
             targetStatId = matchStat[1];
-            const explicitBaseUrl = `${cleanBase}/results?statEventId=${targetStatId}`;
+            const explicitBaseUrl = `\({cleanBase}/results?statEventId=\){targetStatId}`;
             await new Promise(r => setTimeout(r, 2000));
             rawContent = await scrapeSingleUrl(explicitBaseUrl, 'markdown');
         }
@@ -134,7 +137,9 @@ export default {
         let extraContents = [];
         let targetRounds = [];
         
-        const bracketMatch = rawContent.match(/\[(?:Bracket|Heat Draw)[^\]]*\]\([^)]*roundId=(\d+)[^)]*\)/i);
+        const bracketRegex = new RegExp("\\x5B(?:Bracket|Heat Draw)[^\\x5D]*\\x5D\\x28[^\\x29]*roundId=(\\d+)[^\\x29]*\\x29", "i");
+        const bracketMatch = rawContent.match(bracketRegex);
+        
         if (bracketMatch) {
             targetRounds.push(bracketMatch[1]);
         } else {
@@ -142,10 +147,10 @@ export default {
             if (roundIds.length > 0) targetRounds.push(...roundIds.slice(0, 2));
         }
 
-        const urlParam = targetStatId ? `statEventId=${targetStatId}` : `eventCatId=${catId}`;
+        const urlParam = targetStatId ? `statEventId=\({targetStatId}` : `eventCatId=\){catId}`;
 
         for (const rid of targetRounds) {
-            const u = `${cleanBase}/results?roundId=${rid}&${urlParam}`;
+            const u = `\({cleanBase}/results?roundId=\){rid}&${urlParam}`;
             await new Promise(r => setTimeout(r, 2000));
             const md = await scrapeSingleUrl(u, 'markdown');
             extraContents.push(md);
@@ -153,13 +158,15 @@ export default {
         
         const fullMarkdown = [rawContent, ...extraContents].join('\n\n');
 
+        const markdownLinkRegex = new RegExp("\\x5B([^\\x5D]+)\\x5D\\x28[^\\x29]+\\x29", "g");
+
         const cleanLines = fullMarkdown
           .replace(/<[^>]+>/g, '\n')
           .replace(/\|/g, '\n')
           .replace(/make heat picks.*?(fan picks|\*fan picks|\\fan picks|fan)/gi, '')
           .replace(/make heat picks/gi, '')
           .replace(/[*_#`~\\]/g, '')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+          .replace(markdownLinkRegex, '$1')
           .replace(/\r\n|\r/g, '\n')
           .split('\n')
           .map(l => l.trim())
@@ -170,6 +177,8 @@ export default {
         const isJunkLine = (s) => {
           if (!s || s.length < 2 || s.length > 40) return true;
           const l = s.toLowerCase();
+
+          if (/^-+$/.test(l)) return true;
 
           const eventKeywords = ['rip curl', 'bells beach', 'gold coast', 'margaret river', 'corona cero', 'el salvador', 'rio pro', 'tahiti', 'fiji', 'trestles', 'portugal', 'philippines', 'pipe masters', 'championship tour', 'world surf league', 'presented by', 'bonsoy', 'vivo', 'lexus', 'outerknown', 'surf city', 'meo'];
           if (eventKeywords.some(k => l.includes(k))) return true;
@@ -195,7 +204,7 @@ export default {
           if (l.startsWith('winner adv')) return true;
           if (l === 'event' || l === 'events') return true;
 
-          const bad = ['adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'tourism', 'airways', 'resort', 'surfline', 'product', 'attribute', 'color', 'size', 'price', 'item', 'shipping', 'description'];
+          const bad = ['adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'tourism', 'airways', 'resort', 'surfline', 'product', 'attribute', 'color', 'size', 'price', 'item', 'shipping', 'description', 'value', 'sku', 'qty', 'quantity'];
           return bad.some(b => l === b || l.startsWith(b + ' '));
         };
 
@@ -290,7 +299,7 @@ export default {
         const deduplicate = (arr) => {
             const unicosMap = new Map();
             arr.forEach(h => {
-              const k = `${h.round}-${h.heatIdx}`; 
+              const k = `\({h.round}-\){h.heatIdx}`; 
               if (!unicosMap.has(k)) {
                   unicosMap.set(k, h);
               } else if (unicosMap.get(k).score1 === null && h.score1 !== null) {
@@ -303,7 +312,7 @@ export default {
         const bateriasResponse = deduplicate(heats);
 
         if (bateriasResponse.length === 0) {
-            throw new Error(`Chaveamento indisponível na WSL para a categoria solicitada.`);
+            throw new Error(`Chaveamento indisponivel na WSL para a categoria solicitada.`);
         }
 
         return new Response(JSON.stringify({ sucesso: true, quantidade: bateriasResponse.length, baterias: bateriasResponse }), { headers: corsHeaders });
@@ -313,6 +322,6 @@ export default {
       }
     }
 
-    return new Response(JSON.stringify({ sucesso: false, mensagem: "Rota não encontrada." }), { status: 404, headers: corsHeaders });
+    return new Response(JSON.stringify({ sucesso: false, mensagem: "Rota nao encontrada." }), { status: 404, headers: corsHeaders });
   }
 };
