@@ -35,9 +35,8 @@ export default {
       if (!jobId) throw new Error("Anakin.io não gerou o ID do job.");
 
       let attempts = 0;
-      // OTIMIZAÇÃO: Checa a cada 4 segundos (max 10 vezes = 40s) para não estourar os 50 subrequests do Cloudflare
-      while (attempts < 10) {
-        await new Promise(r => setTimeout(r, 4000));
+      while (attempts < 45) {
+        await new Promise(r => setTimeout(r, 1000));
         attempts++;
 
         const pollRes = await fetch(`https://api.anakin.io/v1/url-scraper/${jobId}`, { headers });
@@ -46,11 +45,11 @@ export default {
           if (result.status === "completed") {
             return result.markdown || result.html || (result.data ? result.data.markdown || result.data.html : "");
           } else if (result.status === "failed") {
-            throw new Error("Falha no servidor do Anakin ao processar a página.");
+            throw new Error("Falha no servidor do Anakin ao ler a página.");
           }
         }
       }
-      throw new Error("Timeout: A WSL demorou mais de 40s na validação (Limite de tempo atingido).");
+      throw new Error("Timeout: A WSL demorou mais de 45s na validação.");
     };
 
     // =========================================================================
@@ -120,7 +119,6 @@ export default {
           }), { status: 200, headers: corsHeaders });
         }
 
-        // --- 1. ISOLAMENTO ESTRITO DE GÊNERO ---
         let targetStatId = null;
         const genderRegex = catParam === 'feminino' ? /\[[^\]]*Women's[^\]]*\]\([^)]*statEventId=(\d+)/i : /\[[^\]]*Men's[^\]]*\]\([^)]*statEventId=(\d+)/i;
         const matchStat = rawContent.match(genderRegex);
@@ -128,11 +126,10 @@ export default {
         if (matchStat) {
             targetStatId = matchStat[1];
             const explicitBaseUrl = `${cleanBase}/results?statEventId=${targetStatId}`;
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 2000));
             rawContent = await scrapeSingleUrl(explicitBaseUrl, 'markdown');
         }
 
-        // --- 2. ABA BRACKET ---
         let extraContents = [];
         let targetRounds = [];
         
@@ -141,7 +138,6 @@ export default {
             targetRounds.push(bracketMatch[1]);
         } else {
             const roundIds = [...new Set([...rawContent.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
-            // Limita a 2 abas extras para não estourar as 50 requests do Cloudflare
             if (roundIds.length > 0) targetRounds.push(...roundIds.slice(0, 2));
         }
 
@@ -149,7 +145,7 @@ export default {
 
         for (const rid of targetRounds) {
             const u = `${cleanBase}/results?roundId=${rid}&${urlParam}`;
-            await new Promise(r => setTimeout(r, 1500));
+            await new Promise(r => setTimeout(r, 2000));
             const md = await scrapeSingleUrl(u, 'markdown');
             extraContents.push(md);
         }
@@ -177,7 +173,7 @@ export default {
           const eventKeywords = ['rip curl', 'bells beach', 'gold coast', 'margaret river', 'corona cero', 'el salvador', 'rio pro', 'tahiti', 'fiji', 'trestles', 'portugal', 'philippines', 'pipe masters', 'championship tour', 'world surf league', 'presented by', 'bonsoy', 'vivo', 'lexus', 'outerknown', 'surf city', 'meo'];
           if (eventKeywords.some(k => l.includes(k))) return true;
 
-          const navKeywords = ['prizes', 'heat analyzer', 'champions', 'forecast', 'official gear', 'event guide', 'schedule', 'rankings', 'surfers', 'fantasy', 'one ocean', 'store', 'inspired by', 'surf coast'];
+          const navKeywords = ['prizes', 'heat analyzer', 'champions', 'forecast', 'official gear', 'event guide', 'schedule', 'rankings', 'surfers', 'fantasy', 'one ocean', 'store', 'inspired by', 'surf coast', 'shop', 'cart', 'checkout', 'privacy', 'terms', 'support'];
           if (navKeywords.some(k => l.includes(k))) return true;
 
           if (l.includes("men's heats") || l.includes("women's heats")) return true;
@@ -189,12 +185,18 @@ export default {
           if (/^qf\s*heat\s*\d+/i.test(l)) return true;
           if (/^sf\s*heat\s*\d+/i.test(l)) return true;
           if (/^final/i.test(l)) return true;
+          
           if (l.includes('waves') || l.includes('wave')) return true;
           if (l.includes('+')) return true;
           if (l === '––' || l === '-' || l === '–') return true;
           if (l.includes('picks') || l.includes('fan')) return true;
+          
+          // Tratamento rigoroso de falsos positivos de cabeçalho
+          if (l.startsWith('winner adv')) return true;
+          if (l === 'event' || l === 'events') return true;
 
-          const bad = ['winner', 'adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'seed', 'event', 'tourism', 'airways', 'resort', 'surfline'];
+          // Note que 'seed', 'event' e 'winner' foram removidos desta lista para permitir que o sistema guarde a posição do atleta vazio.
+          const bad = ['adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'tourism', 'airways', 'resort', 'surfline', 'product', 'attribute', 'color', 'size', 'price', 'item', 'shipping', 'description'];
           return bad.some(b => l === b || l.startsWith(b + ' '));
         };
 
@@ -205,18 +207,37 @@ export default {
         let heatMeta = { round: null, heatIdx: null };
 
         const processHeat = () => {
-           if (currentP1 && currentP2 && currentP1.toLowerCase() !== currentP2.toLowerCase() && !/[\d]/.test(currentP1) && !/[\d]/.test(currentP2)) {
-               let winner = null;
-               if (currentS1 !== null && currentS2 !== null) {
-                   if (currentS1 > currentS2) winner = currentP1;
-                   else if (currentS2 > currentS1) winner = currentP2;
+           if (currentP1 || currentP2) {
+               
+               // Função que transforma dados corrompidos, placares pendentes e cabeças de chave em 'Aguardando...'
+               const cleanName = (name) => {
+                   if (!name) return 'Aguardando...';
+                   const low = name.toLowerCase();
+                   if (low.includes('seed') || low.includes('winner') || low.includes('tbd') || low.includes('tbc') || /[\d]/.test(name)) {
+                       return 'Aguardando...';
+                   }
+                   return name;
+               };
+
+               const finalP1 = cleanName(currentP1);
+               const finalP2 = cleanName(currentP2);
+
+               // Aborta apenas se capturou um falso positivo (dois nomes exatos iguais)
+               const isInvalid = (finalP1 !== 'Aguardando...' && finalP2 !== 'Aguardando...' && finalP1.toLowerCase() === finalP2.toLowerCase());
+
+               if (!isInvalid && (finalP1 !== 'Aguardando...' || finalP2 !== 'Aguardando...')) {
+                   let winner = null;
+                   if (currentS1 !== null && currentS2 !== null) {
+                       if (currentS1 > currentS2) winner = finalP1;
+                       else if (currentS2 > currentS1) winner = finalP2;
+                   }
+                   heats.push({ 
+                     p1: finalP1, p2: finalP2, 
+                     score1: currentS1, score2: currentS2, 
+                     winner, 
+                     round: heatMeta.round, heatIdx: heatMeta.heatIdx 
+                   });
                }
-               heats.push({ 
-                 p1: currentP1, p2: currentP2, 
-                 score1: currentS1, score2: currentS2, 
-                 winner, 
-                 round: heatMeta.round, heatIdx: heatMeta.heatIdx 
-               });
            }
            currentP1 = null; currentS1 = null; currentP2 = null; currentS2 = null;
         };
