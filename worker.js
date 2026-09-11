@@ -35,8 +35,9 @@ export default {
       if (!jobId) throw new Error("Anakin.io não gerou o ID do job.");
 
       let attempts = 0;
-      while (attempts < 45) {
-        await new Promise(r => setTimeout(r, 1000));
+      // OTIMIZAÇÃO: Checa a cada 4 segundos (máx 12 vezes = 48s) para manter os subrequests baixos no Cloudflare
+      while (attempts < 12) {
+        await new Promise(r => setTimeout(r, 4000));
         attempts++;
 
         const pollRes = await fetch(`https://api.anakin.io/v1/url-scraper/${jobId}`, { headers });
@@ -49,7 +50,7 @@ export default {
           }
         }
       }
-      throw new Error("Timeout: A WSL demorou mais de 45s na validação.");
+      throw new Error("Timeout: A WSL demorou mais de 45s na validação anti-bot.");
     };
 
     // =========================================================================
@@ -191,11 +192,9 @@ export default {
           if (l === '––' || l === '-' || l === '–') return true;
           if (l.includes('picks') || l.includes('fan')) return true;
           
-          // Tratamento rigoroso de falsos positivos de cabeçalho
           if (l.startsWith('winner adv')) return true;
           if (l === 'event' || l === 'events') return true;
 
-          // Note que 'seed', 'event' e 'winner' foram removidos desta lista para permitir que o sistema guarde a posição do atleta vazio.
           const bad = ['adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'tourism', 'airways', 'resort', 'surfline', 'product', 'attribute', 'color', 'size', 'price', 'item', 'shipping', 'description'];
           return bad.some(b => l === b || l.startsWith(b + ' '));
         };
@@ -209,7 +208,6 @@ export default {
         const processHeat = () => {
            if (currentP1 || currentP2) {
                
-               // Função que transforma dados corrompidos, placares pendentes e cabeças de chave em 'Aguardando...'
                const cleanName = (name) => {
                    if (!name) return 'Aguardando...';
                    const low = name.toLowerCase();
@@ -222,7 +220,6 @@ export default {
                const finalP1 = cleanName(currentP1);
                const finalP2 = cleanName(currentP2);
 
-               // Aborta apenas se capturou um falso positivo (dois nomes exatos iguais)
                const isInvalid = (finalP1 !== 'Aguardando...' && finalP2 !== 'Aguardando...' && finalP1.toLowerCase() === finalP2.toLowerCase());
 
                if (!isInvalid && (finalP1 !== 'Aguardando...' || finalP2 !== 'Aguardando...')) {
