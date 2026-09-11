@@ -278,22 +278,20 @@
 			// startBackgroundSync() REVOADO: Não sincroniza mais todas as etapas em lote para economizar créditos.
 		}
 
-        // 1. CARREGAMENTO DE INTERFACE (Resolve o bug da troca de abas MASC/FEM)
+        // 1. CARREGAMENTO LIMPO (Sem recálculos destrutivos redundantes)
         async function carregarInterfaceEtapa() {
-            // Carrega os vencedores que o usuário escolheu
+            renderBanner();
             carregarPalpitesLocais(); 
-
-            // SEMPRE tenta injetar os nomes dos atletas do Cache da API silenciosamente
+            
             const backupData = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
             if (backupData) {
+                // O aplicar já faz o recálculo protegido e o render. Não chamamos nada depois dele!
                 aplicarBateriasSincronizadas(JSON.parse(backupData), false, true);
+            } else {
+                recalculateCascades(true);
+                renderBracket();
             }
 
-            recalculateCascades();
-            renderBanner();
-            renderBracket();
-
-            // Se após tudo isso, o Round 1 continuar vazio (sem cache e sem palpite), aciona o scraper
             const catHeats = currentEvent.heats[currentCategory];
             if (catHeats && catHeats.r1 && catHeats.r1[0] && catHeats.r1[0].p1 === 'Aguardando...') {
                 await sincronizarWSLAuto(true);
@@ -411,35 +409,30 @@
             }
         }
 
-        // 3. RESET INTELIGENTE ORIENTADO A COORDENADAS (Sem arrays hardcoded!)
+        // 2. RESET INTELIGENTE (Usa a própria função de sincronia para restaurar)
         function resetBracketInteligente() {
             const catHeats = currentEvent.heats[currentCategory];
             const backupStr = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
 
-            // A. Limpa todos os vencedores e reseta os nomes por segurança
+            // Limpa tudo
             Object.values(catHeats).forEach(r => Array.isArray(r) && r.forEach(h => {
                 h.p1 = 'Aguardando...'; h.p2 = 'Aguardando...'; h.winner = null;
             }));
             catHeats.champion = null;
 
-            // B. Preenche cirurgicamente usando as coordenadas extraídas pelo Worker
             if (backupStr) {
-                const baterias = JSON.parse(backupStr);
-                baterias.forEach(ext => {
-                    // Encaixa nos Rounds exatos extraídos (Ex: qf, sf, r1, r2)
-                    if (ext.round && ext.heatIdx !== undefined && catHeats[ext.round] && catHeats[ext.round][ext.heatIdx]) {
-                        catHeats[ext.round][ext.heatIdx].p1 = ext.p1 || 'Aguardando...';
-                        catHeats[ext.round][ext.heatIdx].p2 = ext.p2 || 'Aguardando...';
-                    }
-                });
+                // Se tem cache da API, restaura os atletas oficiais automaticamente
+                aplicarBateriasSincronizadas(JSON.parse(backupStr), false, true);
+                showToast("🔄 Chave restaurada! Palpites limpos, mas chaveamento oficial mantido.");
+            } else {
+                recalculateCascades(true);
+                salvarPalpitesLocal();
+                renderBracket();
+                showToast("🔄 Chave completamente limpa.");
             }
-
-            recalculateCascades();
-            salvarPalpitesLocal();
-            renderBracket();
-            showToast("🔄 Chave restaurada! Palpites limpos, mas chaveamento mantido.");
         }
 
+        // 3. APLICAÇÃO DE BATERIAS (Protege os palpites do usuário)
         function aplicarBateriasSincronizadas(baterias, saveBackup = true, silent = false) {
             if (!baterias || baterias.length === 0) return;
 
@@ -450,14 +443,12 @@
             const catHeats = currentEvent.heats[currentCategory];
             if (!catHeats) return;
 
-            // Função flexível de detecção: compara os últimos nomes e iniciais para garantir a vitória mesmo com nomes curtos
             const isSameSurfer = (fullName, shortName) => {
                 if(!fullName || !shortName || fullName === 'Aguardando...' || shortName === 'Aguardando...') return false;
                 const fullClean = fullName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
                 const shortClean = shortName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
                 const fullParts = fullClean.split(/\s+/);
                 const shortParts = shortClean.split(/\s+/);
-                // Checa o último sobrenome. Ex: "Johnson" em "Bettylou Sakura Johnson" vs "B. Johnson"
                 if(fullParts[fullParts.length - 1] === shortParts[shortParts.length - 1]) return true;
                 return false;
             };
@@ -465,23 +456,21 @@
             const assignHeat = (sysHeat, ext) => {
                 if (!sysHeat || !ext) return;
                 
-                // Se o dado vier preenchido e não for lixo, sobrescrevemos o sistema com a realidade da API
                 if(ext.p1 && ext.p1 !== 'Aguardando...') sysHeat.p1 = ext.p1;
                 if(ext.p2 && ext.p2 !== 'Aguardando...') sysHeat.p2 = ext.p2;
                 
+                // Se a API diz que a bateria já acabou na vida real, ela sobrescreve seu palpite.
                 if (ext.winner) {
                     if (isSameSurfer(sysHeat.p1, ext.winner)) sysHeat.winner = sysHeat.p1;
                     else if (isSameSurfer(sysHeat.p2, ext.winner)) sysHeat.winner = sysHeat.p2;
-                    else sysHeat.winner = ext.winner; // Se falhar tudo, joga o nome literal da API
-                } else {
-                    sysHeat.winner = null;
+                    else sysHeat.winner = ext.winner; 
                 }
+                // REMOVIDO O ELSE DESTRUTIVO: Se a bateria não aconteceu, os seus palpites locais são respeitados!
             };
 
             let totalAtualizadas = 0;
 
             baterias.forEach((ext, idx) => {
-                // MAPEAMENTO INTELIGENTE DE COORDENADAS: Sempre prioritário
                 if (ext.round && ext.heatIdx !== undefined && catHeats[ext.round]) {
                     const sysHeat = catHeats[ext.round][ext.heatIdx];
                     if (sysHeat) {
@@ -489,7 +478,6 @@
                         totalAtualizadas++;
                     }
                 } else {
-                    // Fallback de índice manual - REMOVIDO para impedir injeções corrompidas de lista plana
                     console.warn("Bateria da API descartada por falta de coordenada válida:", ext);
                 }
             });
@@ -499,19 +487,17 @@
             }
 
             currentEvent.defined = true;
-            // Desliga a sobrescrita destrutiva local antes de salvar a renderização da API
-            recalculateCascades(true); // O parâmetro 'true' avisa que estamos em modo API
+            recalculateCascades(true); 
             salvarPalpitesLocal();
             renderBracket();
             
             if(saveBackup && !silent) showToast(`✅ ${totalAtualizadas} baterias carregadas com sucesso!`);
         }
 		
-		// === Ajuste a função updateSlot para NUNCA limpar um nome injetado por API ===
+		// 4. ATUALIZAR SLOT (Blinda a chave contra Placeholders)
         function updateSlot(heat, slot, val, isApiSync = false) { 
-            // Se for sincronização da API, ignoramos os placeholders "Vencedor R1" para não sujar o nome real.
+            // Se for a API rodando os recálculos, ela é PROIBIDA de sobrescrever um nome verdadeiro com um "Vencedor H2" ou "Aguardando..."
             if(isApiSync && heat[slot] && heat[slot] !== 'Aguardando...' && !heat[slot].includes('Vencedor')) {
-                // Se já tem um nome real ali, NÃO mexe, deixa a API comandar.
                 return;
             }
             heat[slot] = val || 'Aguardando...'; 
