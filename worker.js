@@ -127,7 +127,6 @@ export default {
         let targetStatId = null;
         let genderUrl = null;
         
-        // Agora extraimos o Href (URL) completa do site ao inves de so adivinhar o ID
         const regexFeminino = new RegExp("\\x5B[^\\x5D]*Women's[^\\x5D]*\\x5D\\x28([^\\x29]*statEventId=(\\d+)[^\\x29]*)\\x29", "i");
         const regexMasculino = new RegExp("\\x5B[^\\x5D]*Men's[^\\x5D]*\\x5D\\x28([^\\x29]*statEventId=(\\d+)[^\\x29]*)\\x29", "i");
         
@@ -145,24 +144,22 @@ export default {
             targetStatId = matchStat[2];
         }
 
-        // Se a WSL redirecionou (ex: para /posts/), nos seguimos obedientemente
+        let finalBaseUrl = resultsURL;
+
         if (genderUrl) {
-            let explicitBaseUrl = genderUrl;
-            if (explicitBaseUrl.startsWith('/')) explicitBaseUrl = "https://www.worldsurfleague.com" + explicitBaseUrl;
-            else if (!explicitBaseUrl.startsWith('http')) explicitBaseUrl = "https://www.worldsurfleague.com/" + explicitBaseUrl;
-            
+            // UTILIZANDO A FUNCAO NATIVA DO JS (new URL) PARA FUNDIR LINKS COM SEGURANCA
+            finalBaseUrl = new URL(genderUrl, resultsURL).href;
             await new Promise(r => setTimeout(r, 2000));
-            rawContent = await scrapeSingleUrl(explicitBaseUrl, 'markdown');
+            rawContent = await scrapeSingleUrl(finalBaseUrl, 'markdown');
         } else if (targetStatId) {
-            const explicitBaseUrl = cleanBase + "/results?statEventId=" + targetStatId;
+            finalBaseUrl = cleanBase + "/results?statEventId=" + targetStatId;
             await new Promise(r => setTimeout(r, 2000));
-            rawContent = await scrapeSingleUrl(explicitBaseUrl, 'markdown');
+            rawContent = await scrapeSingleUrl(finalBaseUrl, 'markdown');
         }
 
         let extraContents = [];
         let targetHrefs = [];
         
-        // Coletamos as URLs completas da aba de Bracket gerada pela WSL
         const bracketRegex = new RegExp("\\x5B(?:Bracket|Heat Draw)[^\\x5D]*\\x5D\\x28([^\\x29]*roundId=\\d+[^\\x29]*)\\x29", "i");
         const bracketMatch = rawContent.match(bracketRegex);
         
@@ -177,11 +174,9 @@ export default {
         const urlParam = targetStatId ? "statEventId=" + targetStatId : "eventCatId=" + catId;
 
         for (let href of targetHrefs) {
-            let u = href;
-            if (u.startsWith('/')) u = "https://www.worldsurfleague.com" + u;
-            else if (!u.startsWith('http')) u = "https://www.worldsurfleague.com/" + u;
+            // FUNCAO NATIVA RESOLVENDO ABAS DE FORMA SEGURA
+            let u = new URL(href, finalBaseUrl).href;
             
-            // Tratamento inteligente de seguranca da URL
             if (targetStatId && !u.includes("statEventId=" + targetStatId)) {
                 if (u.includes("statEventId=")) {
                     u = u.replace(/statEventId=\d+/, "statEventId=" + targetStatId);
