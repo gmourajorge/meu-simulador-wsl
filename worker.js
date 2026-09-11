@@ -125,36 +125,75 @@ export default {
         }
 
         let targetStatId = null;
+        let genderUrl = null;
         
-        const regexFeminino = new RegExp("\\x5B[^\\x5D]*Women's[^\\x5D]*\\x5D\\x28[^\\x29]*statEventId=(\\d+)", "i");
-        const regexMasculino = new RegExp("\\x5B[^\\x5D]*Men's[^\\x5D]*\\x5D\\x28[^\\x29]*statEventId=(\\d+)", "i");
+        // Agora extraimos o Href (URL) completa do site ao inves de so adivinhar o ID
+        const regexFeminino = new RegExp("\\x5B[^\\x5D]*Women's[^\\x5D]*\\x5D\\x28([^\\x29]*statEventId=(\\d+)[^\\x29]*)\\x29", "i");
+        const regexMasculino = new RegExp("\\x5B[^\\x5D]*Men's[^\\x5D]*\\x5D\\x28([^\\x29]*statEventId=(\\d+)[^\\x29]*)\\x29", "i");
         
-        const matchStat = rawContent.match(catParam === 'feminino' ? regexFeminino : regexMasculino);
+        let matchStat = rawContent.match(catParam === 'feminino' ? regexFeminino : regexMasculino);
         
-        if (matchStat) {
-            targetStatId = matchStat[1];
+        if (!matchStat) {
+            const regexOpposite = catParam === 'feminino' ? regexMasculino : regexFeminino;
+            const opostoMatch = rawContent.match(regexOpposite);
+            if (opostoMatch) {
+                const opostoId = parseInt(opostoMatch[2]);
+                targetStatId = catParam === 'feminino' ? (opostoId + 1).toString() : (opostoId - 1).toString();
+            }
+        } else {
+            genderUrl = matchStat[1];
+            targetStatId = matchStat[2];
+        }
+
+        // Se a WSL redirecionou (ex: para /posts/), nos seguimos obedientemente
+        if (genderUrl) {
+            let explicitBaseUrl = genderUrl;
+            if (explicitBaseUrl.startsWith('/')) explicitBaseUrl = "https://www.worldsurfleague.com" + explicitBaseUrl;
+            else if (!explicitBaseUrl.startsWith('http')) explicitBaseUrl = "https://www.worldsurfleague.com/" + explicitBaseUrl;
+            
+            await new Promise(r => setTimeout(r, 2000));
+            rawContent = await scrapeSingleUrl(explicitBaseUrl, 'markdown');
+        } else if (targetStatId) {
             const explicitBaseUrl = cleanBase + "/results?statEventId=" + targetStatId;
             await new Promise(r => setTimeout(r, 2000));
             rawContent = await scrapeSingleUrl(explicitBaseUrl, 'markdown');
         }
 
         let extraContents = [];
-        let targetRounds = [];
+        let targetHrefs = [];
         
-        const bracketRegex = new RegExp("\\x5B(?:Bracket|Heat Draw)[^\\x5D]*\\x5D\\x28[^\\x29]*roundId=(\\d+)[^\\x29]*\\x29", "i");
+        // Coletamos as URLs completas da aba de Bracket gerada pela WSL
+        const bracketRegex = new RegExp("\\x5B(?:Bracket|Heat Draw)[^\\x5D]*\\x5D\\x28([^\\x29]*roundId=\\d+[^\\x29]*)\\x29", "i");
         const bracketMatch = rawContent.match(bracketRegex);
         
         if (bracketMatch) {
-            targetRounds.push(bracketMatch[1]);
+            targetHrefs.push(bracketMatch[1]);
         } else {
-            const roundIds = [...new Set([...rawContent.matchAll(/roundId=(\d+)/g)].map(m => m[1]))];
-            if (roundIds.length > 0) targetRounds.push(...roundIds.slice(0, 2));
+            const allRoundUrls = [...rawContent.matchAll(new RegExp("\\x28([^\\x29]*roundId=\\d+[^\\x29]*)\\x29", "ig"))].map(m => m[1]);
+            const uniqueUrls = [...new Set(allRoundUrls)];
+            if (uniqueUrls.length > 0) targetHrefs.push(...uniqueUrls.slice(0, 2));
         }
 
         const urlParam = targetStatId ? "statEventId=" + targetStatId : "eventCatId=" + catId;
 
-        for (const rid of targetRounds) {
-            const u = cleanBase + "/results?roundId=" + rid + "&" + urlParam;
+        for (let href of targetHrefs) {
+            let u = href;
+            if (u.startsWith('/')) u = "https://www.worldsurfleague.com" + u;
+            else if (!u.startsWith('http')) u = "https://www.worldsurfleague.com/" + u;
+            
+            // Tratamento inteligente de seguranca da URL
+            if (targetStatId && !u.includes("statEventId=" + targetStatId)) {
+                if (u.includes("statEventId=")) {
+                    u = u.replace(/statEventId=\d+/, "statEventId=" + targetStatId);
+                } else {
+                    const separator = u.includes('?') ? '&' : '?';
+                    u = u + separator + urlParam;
+                }
+            } else if (!targetStatId && !u.includes("eventCatId=")) {
+                 const separator = u.includes('?') ? '&' : '?';
+                 u = u + separator + urlParam;
+            }
+
             await new Promise(r => setTimeout(r, 2000));
             const md = await scrapeSingleUrl(u, 'markdown');
             extraContents.push(md);
@@ -208,8 +247,7 @@ export default {
           if (l.startsWith('winner adv')) return true;
           if (l === 'event' || l === 'events') return true;
 
-          // Adicionado 'name', 'image', 'photo', 'picture' ao filtro
-          const bad = ['adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'tourism', 'airways', 'resort', 'surfline', 'product', 'attribute', 'color', 'size', 'price', 'item', 'shipping', 'description', 'value', 'sku', 'qty', 'quantity', 'name', 'image', 'photo', 'picture'];
+          const bad = ['adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'tourism', 'airways', 'resort', 'surfline', 'product', 'attribute', 'color', 'size', 'price', 'item', 'shipping', 'description', 'value', 'sku', 'qty', 'quantity', 'name', 'image', 'photo', 'picture', 'live', 'in the water', 'status', 'heat status', 'watching', 'now playing'];
           return bad.some(b => l === b || l.startsWith(b + ' '));
         };
 
