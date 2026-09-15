@@ -127,8 +127,9 @@ export default {
         let targetStatId = null;
         let genderUrl = null;
         
-        const regexFeminino = new RegExp("\\x5B[^\\x5D]*Women's[^\\x5D]*\\x5D\\x28([^\\x29]*statEventId=(\\d+)[^\\x29]*)\\x29", "i");
-        const regexMasculino = new RegExp("\\x5B[^\\x5D]*Men's[^\\x5D]*\\x5D\\x28([^\\x29]*statEventId=(\\d+)[^\\x29]*)\\x29", "i");
+        // Regex robusto que aceita Women's e Womens sem quebrar
+        const regexFeminino = new RegExp("\\x5B[^\\x5D]*Women.?s[^\\x5D]*\\x5D\\x28([^\\x29]*statEventId=(\\d+)[^\\x29]*)\\x29", "i");
+        const regexMasculino = new RegExp("\\x5B[^\\x5D]*Men.?s[^\\x5D]*\\x5D\\x28([^\\x29]*statEventId=(\\d+)[^\\x29]*)\\x29", "i");
         
         let matchStat = rawContent.match(catParam === 'feminino' ? regexFeminino : regexMasculino);
         
@@ -147,7 +148,6 @@ export default {
         let finalBaseUrl = resultsURL;
 
         if (genderUrl) {
-            // UTILIZANDO A FUNCAO NATIVA DO JS (new URL) PARA FUNDIR LINKS COM SEGURANCA
             finalBaseUrl = new URL(genderUrl, resultsURL).href;
             await new Promise(r => setTimeout(r, 2000));
             rawContent = await scrapeSingleUrl(finalBaseUrl, 'markdown');
@@ -160,7 +160,7 @@ export default {
         let extraContents = [];
         let targetHrefs = [];
         
-        const bracketRegex = new RegExp("\\x5B(?:Bracket|Heat Draw)[^\\x5D]*\\x5D\\x28([^\\x29]*roundId=\\d+[^\\x29]*)\\x29", "i");
+        const bracketRegex = new RegExp("\\x5B(?:Bracket|Heat Draw|Chaveamento)[^\\x5D]*\\x5D\\x28([^\\x29]*roundId=\\d+[^\\x29]*)\\x29", "i");
         const bracketMatch = rawContent.match(bracketRegex);
         
         if (bracketMatch) {
@@ -174,7 +174,6 @@ export default {
         const urlParam = targetStatId ? "statEventId=" + targetStatId : "eventCatId=" + catId;
 
         for (let href of targetHrefs) {
-            // FUNCAO NATIVA RESOLVENDO ABAS DE FORMA SEGURA
             let u = new URL(href, finalBaseUrl).href;
             
             if (targetStatId && !u.includes("statEventId=" + targetStatId)) {
@@ -226,14 +225,6 @@ export default {
 
           if (l.includes("men's heats") || l.includes("women's heats")) return true;
 
-          if (/^round\s*\d+/i.test(l)) return true;
-          if (/^(quarterfinal|semifinal)s?/i.test(l)) return true;
-          if (/^heat\s*\d+/i.test(l)) return true;
-          if (/^r[1-9]\s*heat\s*\d+/i.test(l)) return true;
-          if (/^qf\s*heat\s*\d+/i.test(l)) return true;
-          if (/^sf\s*heat\s*\d+/i.test(l)) return true;
-          if (/^final/i.test(l)) return true;
-          
           if (l.includes('waves') || l.includes('wave')) return true;
           if (l.includes('+')) return true;
           if (l === '––' || l === '-' || l === '–') return true;
@@ -258,10 +249,13 @@ export default {
                const cleanName = (name) => {
                    if (!name) return 'Aguardando...';
                    const low = name.toLowerCase();
-                   if (low.includes('seed') || low.includes('winner') || low.includes('tbd') || low.includes('tbc') || /[\d]/.test(name)) {
+                   if (low.includes('seed') || low.includes('winner') || low.includes('tbd') || low.includes('tbc')) {
                        return 'Aguardando...';
                    }
-                   return name;
+                   // Extrai apenas o nome, ignorando blocos de notas/numeros caso o markdown cole as strings
+                   let cleaned = name.replace(/[\d.\s]+$/, '').trim();
+                   if (!cleaned || /^[\d.\s]+$/.test(cleaned)) return 'Aguardando...';
+                   return cleaned;
                };
 
                const finalP1 = cleanName(currentP1);
@@ -269,7 +263,8 @@ export default {
 
                const isInvalid = (finalP1 !== 'Aguardando...' && finalP2 !== 'Aguardando...' && finalP1.toLowerCase() === finalP2.toLowerCase());
 
-               if (!isInvalid && (finalP1 !== 'Aguardando...' || finalP2 !== 'Aguardando...')) {
+               // ATENCAO: Agora o script empurra baterias vazias para compor a tabela e nao zerar o array
+               if (!isInvalid) {
                    let winner = null;
                    if (currentS1 !== null && currentS2 !== null) {
                        if (currentS1 > currentS2) winner = finalP1;
@@ -292,16 +287,38 @@ export default {
 
           let m;
           let isHeader = false;
-          if (l === 'final' || l === 'grand final') {
+          
+          if (l === 'final' || l === 'grand final' || l === 'title match') {
               processHeat(); currentRound = 'final'; currentHeatIdx = 0; isHeader = true;
-          } else if ((m = l.match(/^(?:qf|quarterfinal|quarterfinals)\s*heat\s*(\d+)/))) {
+          } else if ((m = l.match(/^(?:qf|quarterfinal|quarterfinals|quartas)\s*(?:-\s*)?heat\s*(\d+)/))) {
               processHeat(); currentRound = 'qf'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
-          } else if ((m = l.match(/^(?:sf|semifinal|semifinals)\s*heat\s*(\d+)/))) {
+          } else if ((m = l.match(/^(?:sf|semifinal|semifinals|semis?|match)\s*(?:-\s*)?heat\s*(\d+)/))) {
               processHeat(); currentRound = 'sf'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
-          } else if ((m = l.match(/^(?:r\d+|round\s*\d+)\s*heat\s*(\d+)/))) {
-              processHeat(); const rNum = l.match(/\d+/)[0]; currentRound = 'r' + rNum; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+          } else if ((m = l.match(/^(?:r\d+|round\s*(?:of\s*)?\d+|opening round|elimination round)\s*(?:-\s*)?heat\s*(\d+)/))) {
+              processHeat();
+              let dMatch = l.match(/\d+/);
+              let rNum = '1';
+              if (l.includes('elimination')) rNum = '2';
+              else if (dMatch) rNum = dMatch[0];
+              currentRound = 'r' + rNum;
+              currentHeatIdx = parseInt(m[1]) - 1;
+              isHeader = true;
           } else if ((m = l.match(/^heat\s*(\d+)/))) {
-              processHeat(); currentRound = 'r1'; currentHeatIdx = parseInt(m[1]) - 1; isHeader = true;
+              processHeat();
+              if (!currentRound) currentRound = 'r1';
+              currentHeatIdx = parseInt(m[1]) - 1;
+              isHeader = true;
+          } else if ((m = l.match(/^(?:qf|quarterfinal|quarterfinals|quartas(?: de final)?)$/))) {
+              currentRound = 'qf'; continue;
+          } else if ((m = l.match(/^(?:sf|semifinal|semifinals|semis?)$/))) {
+              currentRound = 'sf'; continue;
+          } else if ((m = l.match(/^(?:r\d+|round\s*(?:of\s*)?\d+|opening round|elimination round)$/))) {
+              let dMatch = l.match(/\d+/);
+              let rNum = '1';
+              if (l.includes('elimination')) rNum = '2';
+              else if (dMatch) rNum = dMatch[0];
+              currentRound = 'r' + rNum;
+              continue;
           }
 
           if (isHeader) {
