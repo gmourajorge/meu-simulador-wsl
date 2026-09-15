@@ -127,7 +127,6 @@ export default {
         let targetStatId = null;
         let genderUrl = null;
         
-        // Regex robusto que aceita Women's e Womens sem quebrar
         const regexFeminino = new RegExp("\\x5B[^\\x5D]*Women.?s[^\\x5D]*\\x5D\\x28([^\\x29]*statEventId=(\\d+)[^\\x29]*)\\x29", "i");
         const regexMasculino = new RegExp("\\x5B[^\\x5D]*Men.?s[^\\x5D]*\\x5D\\x28([^\\x29]*statEventId=(\\d+)[^\\x29]*)\\x29", "i");
         
@@ -141,7 +140,8 @@ export default {
                 targetStatId = catParam === 'feminino' ? (opostoId + 1).toString() : (opostoId - 1).toString();
             }
         } else {
-            genderUrl = matchStat[1];
+            // CORRECAO: Separa por espacos/aspas para isolar a URL do Titulo Markdown
+            genderUrl = matchStat[1].split(/[\s'"]/)[0];
             targetStatId = matchStat[2];
         }
 
@@ -164,9 +164,10 @@ export default {
         const bracketMatch = rawContent.match(bracketRegex);
         
         if (bracketMatch) {
-            targetHrefs.push(bracketMatch[1]);
+            // CORRECAO: Separa a URL
+            targetHrefs.push(bracketMatch[1].split(/[\s'"]/)[0]);
         } else {
-            const allRoundUrls = [...rawContent.matchAll(new RegExp("\\x28([^\\x29]*roundId=\\d+[^\\x29]*)\\x29", "ig"))].map(m => m[1]);
+            const allRoundUrls = [...rawContent.matchAll(new RegExp("\\x28([^\\x29]*roundId=\\d+[^\\x29]*)\\x29", "ig"))].map(m => m[1].split(/[\s'"]/)[0]);
             const uniqueUrls = [...new Set(allRoundUrls)];
             if (uniqueUrls.length > 0) targetHrefs.push(...uniqueUrls.slice(0, 2));
         }
@@ -244,7 +245,8 @@ export default {
         let heatMeta = { round: null, heatIdx: null };
 
         const processHeat = () => {
-           if (currentP1 || currentP2) {
+           // CORRECAO: Salva a bateria mesmo que esteja vazia (P1 e P2 nulos) garantindo que arrays nao voltem zerados
+           if (heatMeta.round !== null && heatMeta.heatIdx !== null) {
                
                const cleanName = (name) => {
                    if (!name) return 'Aguardando...';
@@ -252,7 +254,6 @@ export default {
                    if (low.includes('seed') || low.includes('winner') || low.includes('tbd') || low.includes('tbc')) {
                        return 'Aguardando...';
                    }
-                   // Extrai apenas o nome, ignorando blocos de notas/numeros caso o markdown cole as strings
                    let cleaned = name.replace(/[\d.\s]+$/, '').trim();
                    if (!cleaned || /^[\d.\s]+$/.test(cleaned)) return 'Aguardando...';
                    return cleaned;
@@ -263,7 +264,6 @@ export default {
 
                const isInvalid = (finalP1 !== 'Aguardando...' && finalP2 !== 'Aguardando...' && finalP1.toLowerCase() === finalP2.toLowerCase());
 
-               // ATENCAO: Agora o script empurra baterias vazias para compor a tabela e nao zerar o array
                if (!isInvalid) {
                    let winner = null;
                    if (currentS1 !== null && currentS2 !== null) {
@@ -273,7 +273,7 @@ export default {
                    heats.push({ 
                      p1: finalP1, p2: finalP2, 
                      score1: currentS1, score2: currentS2, 
-                     winner, 
+                     winner: winner, 
                      round: heatMeta.round, heatIdx: heatMeta.heatIdx 
                    });
                }
@@ -357,8 +357,14 @@ export default {
               const k = h.round + "-" + h.heatIdx; 
               if (!unicosMap.has(k)) {
                   unicosMap.set(k, h);
-              } else if (unicosMap.get(k).score1 === null && h.score1 !== null) {
-                  unicosMap.set(k, h); 
+              } else {
+                  // CORRECAO: Sobrescreve as baterias vazias pelas populadas na hora de unificar os resultados das 3 abas
+                  const existing = unicosMap.get(k);
+                  if (existing.score1 === null && h.score1 !== null) {
+                      unicosMap.set(k, h); 
+                  } else if (existing.p1 === 'Aguardando...' && h.p1 !== 'Aguardando...') {
+                      unicosMap.set(k, h);
+                  }
               }
             });
             return Array.from(unicosMap.values());
