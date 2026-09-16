@@ -409,30 +409,47 @@
             }
         }
 
-        // 2. RESET INTELIGENTE (Usa a própria função de sincronia para restaurar)
+        // RESET INTELIGENTE
         function resetBracketInteligente() {
             const catHeats = currentEvent.heats[currentCategory];
-            const backupStr = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
+            const backupStr = localStorage.getItem(`wsl_api_backup_\({currentCategory}_\){currentEvent.id}`);
 
-            // Limpa tudo
+            // Apagação Total: Zera completamente a chave do simulador
             Object.values(catHeats).forEach(r => Array.isArray(r) && r.forEach(h => {
                 h.p1 = 'Aguardando...'; h.p2 = 'Aguardando...'; h.winner = null;
             }));
             catHeats.champion = null;
 
             if (backupStr) {
-                // Se tem cache da API, restaura os atletas oficiais automaticamente
-                aplicarBateriasSincronizadas(JSON.parse(backupStr), false, true);
-                showToast("🔄 Chave restaurada! Palpites limpos, mas chaveamento oficial mantido.");
+                const baterias = JSON.parse(backupStr);
+                
+                // MÁQUINA DO TEMPO: Restaura apenas o Grid Inicial (R1 e R2) sem os vencedores
+                baterias.forEach(ext => {
+                    // Filtra para agir apenas nas rodadas iniciais
+                    if (ext.round === 'r1' || ext.round === 'r2') {
+                        if (ext.heatIdx !== undefined && catHeats[ext.round] && catHeats[ext.round][ext.heatIdx]) {
+                            
+                            // Bloqueia placeholders ("Winner of...") de sujarem o round 2 na limpeza
+                            const isRealSurfer = (name) => name && name !== 'Aguardando...' && !name.includes('Vencedora') && !name.includes('Vencedor');
+                            
+                            if (isRealSurfer(ext.p1)) catHeats[ext.round][ext.heatIdx].p1 = ext.p1;
+                            if (isRealSurfer(ext.p2)) catHeats[ext.round][ext.heatIdx].p2 = ext.p2;
+                        }
+                    }
+                });
+                
+                showToast("🔄 Modo Simulação! Chaveamento inicial restaurado. Vencedores oficiais foram ocultados.");
             } else {
-                recalculateCascades(true);
-                salvarPalpitesLocal();
-                renderBracket();
                 showToast("🔄 Chave completamente limpa.");
             }
+
+            // Recalcula a cascata em modo "Usuário" (isApiSync = false) para aplicar os caminhos vazios
+            recalculateCascades(false);
+            salvarPalpitesLocal();
+            renderBracket();
         }
 
-        // 3. APLICAÇÃO DE BATERIAS (Protege os palpites do usuário)
+        // APLICAÇÃO DE BATERIAS (Protege os palpites do usuário)
         function aplicarBateriasSincronizadas(baterias, saveBackup = true, silent = false) {
             if (!baterias || baterias.length === 0) return;
 
@@ -494,14 +511,28 @@
             if(saveBackup && !silent) showToast(`✅ ${totalAtualizadas} baterias carregadas com sucesso!`);
         }
 		
-		// 4. ATUALIZAR SLOT (Blinda a chave contra Placeholders)
+		// ATUALIZAR SLOT (Blinda a chave contra Placeholders)
         function updateSlot(heat, slot, val, isApiSync = false) { 
-            // Se for a API rodando os recálculos, ela é PROIBIDA de sobrescrever um nome verdadeiro com um "Vencedor H2" ou "Aguardando..."
-            if(isApiSync && heat[slot] && heat[slot] !== 'Aguardando...' && !heat[slot].includes('Vencedor')) {
+            // 1. Identifica se o valor que está tentando entrar é apenas um placeholder vazio
+            const isValPlaceholder = !val || val === 'Aguardando...' || val.includes('Vencedora') || val.includes('Vencedor');
+            
+            // 2. Identifica se o slot que vai receber o dado já possui um surfista real (ex: baixado da API)
+            const hasRealSurfer = heat[slot] && heat[slot] !== 'Aguardando...' && !heat[slot].includes('Vencedora') && !heat[slot].includes('Vencedor');
+
+            // 3. A BARREIRA: Impede que o recálculo do simulador apague dados oficiais com espaços vazios
+            if (isValPlaceholder && hasRealSurfer) {
+                return; // Aborta e protege o nome do surfista
+            }
+
+            // 4. Também impede que a API sobrescreva um atleta real (caso de segurança)
+            if (isApiSync && hasRealSurfer) {
                 return;
             }
+
             heat[slot] = val || 'Aguardando...'; 
-            if(heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) heat.winner = null; 
+            if (heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) {
+                heat.winner = null; 
+            }
         }
 		
 		function resetSingleHeat(round, idx) { currentEvent.heats[currentCategory][round][idx].winner = null; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
