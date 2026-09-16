@@ -292,6 +292,7 @@
             if (backupData) {
                 // TEM CACHE: Aplica na tela instantaneamente, sem gastar API
                 aplicarBateriasSincronizadas(JSON.parse(backupData), false, true);
+                showToast("⚡ Etapa carregada rápido da memória local!");
                 console.log(`Etapa carregada do cache local: ${currentEvent.name}`);
             } else {
                 // NÃO TEM CACHE: É a primeira vez abrindo a etapa. Zera a tela e busca na WSL.
