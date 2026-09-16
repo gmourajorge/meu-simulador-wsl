@@ -278,23 +278,26 @@
 			// startBackgroundSync() REVOADO: Não sincroniza mais todas as etapas em lote para economizar créditos.
 		}
 
-        // 1. CARREGAMENTO LIMPO (Sem recálculos destrutivos redundantes)
+        // 1. CARREGAMENTO INTELIGENTE (Com uso de Cache e economia de API)
         async function carregarInterfaceEtapa() {
             renderBanner();
+            
+            // Carrega os palpites que o usuário já tinha feito na simulação
             carregarPalpitesLocais(); 
             
-            const backupData = localStorage.getItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
+            // CHAVE DO CACHE: Verifica se já baixamos a etapa da WSL antes
+            const cacheKey = `wsl_api_backup_\({currentCategory}_\){currentEvent.id}`;
+            const backupData = localStorage.getItem(cacheKey);
+
             if (backupData) {
-                // O aplicar já faz o recálculo protegido e o render. Não chamamos nada depois dele!
+                // TEM CACHE: Aplica na tela instantaneamente, sem gastar API
                 aplicarBateriasSincronizadas(JSON.parse(backupData), false, true);
+                console.log(`Etapa carregada do cache local: ${currentEvent.name}`);
             } else {
+                // NÃO TEM CACHE: É a primeira vez abrindo a etapa. Zera a tela e busca na WSL.
                 recalculateCascades(true);
                 renderBracket();
-            }
-
-            const catHeats = currentEvent.heats[currentCategory];
-            if (catHeats && catHeats.r1 && catHeats.r1[0] && catHeats.r1[0].p1 === 'Aguardando...') {
-                await sincronizarWSLAuto(true);
+                await sincronizarWSLAuto(true); 
             }
         }
 
