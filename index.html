@@ -412,41 +412,46 @@
         // RESET INTELIGENTE
         function resetBracketInteligente() {
             const catHeats = currentEvent.heats[currentCategory];
-            const backupStr = localStorage.getItem(`wsl_api_backup_\({currentCategory}_\){currentEvent.id}`);
 
-            // Apagação Total: Zera completamente a chave do simulador
-            Object.values(catHeats).forEach(r => Array.isArray(r) && r.forEach(h => {
-                h.p1 = 'Aguardando...'; h.p2 = 'Aguardando...'; h.winner = null;
-            }));
+            // 1. FOTO DA MEMÓRIA: Copia os dados atuais do R1 e R2 antes de apagar
+            const backupR1 = JSON.parse(JSON.stringify(catHeats['r1'] || []));
+            const backupR2 = JSON.parse(JSON.stringify(catHeats['r2'] || []));
+
+            // 2. APAGAÇÃO TOTAL: Zera completamente a chave do simulador
+            Object.keys(catHeats).forEach(roundKey => {
+                if (Array.isArray(catHeats[roundKey])) {
+                    catHeats[roundKey].forEach(h => {
+                        h.p1 = 'Aguardando...'; 
+                        h.p2 = 'Aguardando...'; 
+                        h.winner = null;
+                    });
+                }
+            });
             catHeats.champion = null;
 
-            if (backupStr) {
-                const baterias = JSON.parse(backupStr);
-                
-                // MÁQUINA DO TEMPO: Restaura apenas o Grid Inicial (R1 e R2) sem os vencedores
-                baterias.forEach(ext => {
-                    // Filtra para agir apenas nas rodadas iniciais
-                    if (ext.round === 'r1' || ext.round === 'r2') {
-                        if (ext.heatIdx !== undefined && catHeats[ext.round] && catHeats[ext.round][ext.heatIdx]) {
-                            
-                            // Bloqueia placeholders ("Winner of...") de sujarem o round 2 na limpeza
-                            const isRealSurfer = (name) => name && name !== 'Aguardando...' && !name.includes('Vencedora') && !name.includes('Vencedor');
-                            
-                            if (isRealSurfer(ext.p1)) catHeats[ext.round][ext.heatIdx].p1 = ext.p1;
-                            if (isRealSurfer(ext.p2)) catHeats[ext.round][ext.heatIdx].p2 = ext.p2;
-                        }
+            // 3. FILTRO DE RESTAURAÇÃO: Bloqueia a volta de "Vencedor do..." 
+            const isRealSurfer = (name) => name && name !== 'Aguardando...' && !name.toLowerCase().includes('vencedor');
+
+            const restoreRound = (backupData, roundKey) => {
+                if (!backupData || !catHeats[roundKey]) return;
+                backupData.forEach((backupHeat, idx) => {
+                    if (catHeats[roundKey][idx]) {
+                        if (isRealSurfer(backupHeat.p1)) catHeats[roundKey][idx].p1 = backupHeat.p1;
+                        if (isRealSurfer(backupHeat.p2)) catHeats[roundKey][idx].p2 = backupHeat.p2;
                     }
                 });
-                
-                showToast("🔄 Modo Simulação! Chaveamento inicial restaurado. Vencedores oficiais foram ocultados.");
-            } else {
-                showToast("🔄 Chave completamente limpa.");
-            }
+            };
 
-            // Recalcula a cascata em modo "Usuário" (isApiSync = false) para aplicar os caminhos vazios
+            // 4. MÁQUINA DO TEMPO: Devolve apenas os surfistas para o R1 e R2
+            restoreRound(backupR1, 'r1');
+            restoreRound(backupR2, 'r2');
+
+            // 5. RECALCULA E ATUALIZA A TELA
             recalculateCascades(false);
             salvarPalpitesLocal();
             renderBracket();
+            
+            console.log("Modo Simulação ativado: Vencedores oficiais ocultados.");
         }
 
         // APLICAÇÃO DE BATERIAS (Protege os palpites do usuário)
