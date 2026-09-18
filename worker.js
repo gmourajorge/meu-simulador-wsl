@@ -62,31 +62,46 @@ export default {
     // =========================================================================
     if (url.pathname === '/api-events') {
       try {
-        const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/2026/ct?all=1', 'html');
+        const currentYear = new Date().getFullYear();
+        const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/' + currentYear + '/ct?all=1', 'html');
         if (!content) throw new Error("A pagina do calendario veio vazia.");
 
-        const eventRegex = /\/events\/2026\/ct\/(\d+)\/([^/'"?\s>#]+)/gi;
+        // REGEX AVANÇADO: Lê links normais HTML (/) e links injetados no JSON do React (\/)
+        const eventRegex = /(?:\\?\/)events(?:\\?\/)(\d{4})(?:\\?\/)ct(?:\\?\/)(\d+)(?:\\?\/)([^/'"?\s>#\\]+)/gi;
         const eventsFound = [];
         const seenIds = new Set();
         let match;
 
         while ((match = eventRegex.exec(content)) !== null) {
-          const eventId = match[1];
-          const slug = match[2];
+          const eventYear = match[1];
+          const eventId = match[2];
+          const slug = match[3];
 
           if (!seenIds.has(eventId) && !['main', 'results', 'watch', 'standings'].includes(slug)) {
             seenIds.add(eventId);
             const formattedName = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
+            // Tenta identificar se a etapa está ao vivo lendo flags ocultas no JSON da WSL
+            const isLive = content.includes('"id":' + eventId + ',"isLive":true') || content.includes('"isLive":true,"id":' + eventId);
+            const liveTag = isLive ? " (Ao Vivo)" : "";
+
             eventsFound.push({
               id: slug + "-" + eventId,
-              wslUrl: "https://www.worldsurfleague.com/events/2026/ct/" + eventId + "/" + slug + "/results",
-              name: (eventsFound.length + 1) + ". " + formattedName,
+              wslUrl: "https://www.worldsurfleague.com/events/" + eventYear + "/ct/" + eventId + "/" + slug + "/results",
+              name: formattedName + liveTag,
               eventId: eventId,
               slug: slug
             });
           }
         }
+
+        // Ordena pela numeração do ID para garantir que as etapas fiquem na sequência correta
+        eventsFound.sort((a, b) => parseInt(a.eventId) - parseInt(b.eventId));
+        
+        // Aplica a numeração final no nome para exibição no Dropdown
+        eventsFound.forEach((ev, idx) => {
+            ev.name = (idx + 1) + ". " + ev.name;
+        });
 
         if (eventsFound.length === 0) throw new Error("Nenhum link de etapa CT localizado.");
         return new Response(JSON.stringify({ sucesso: true, quantidade: eventsFound.length, eventos: eventsFound }), { headers: corsHeaders });
