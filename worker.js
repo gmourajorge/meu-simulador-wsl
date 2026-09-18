@@ -225,7 +225,6 @@ export default {
           if (navKeywords.some(k => l.includes(k))) return true;
 
           if (l.includes("men's heats") || l.includes("women's heats")) return true;
-
           if (l.includes('waves') || l.includes('wave')) return true;
           if (l.includes('+')) return true;
           if (l === '––' || l === '-' || l === '–') return true;
@@ -234,7 +233,11 @@ export default {
           if (l.startsWith('winner adv')) return true;
           if (l === 'event' || l === 'events') return true;
 
-          const bad = ['adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'upcoming', 'completed', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'tourism', 'airways', 'resort', 'surfline', 'product', 'attribute', 'color', 'size', 'price', 'item', 'shipping', 'description', 'value', 'sku', 'qty', 'quantity', 'name', 'image', 'photo', 'picture', 'live', 'in the water', 'status', 'heat status', 'watching', 'now playing'];
+          // NOVO FILTRO: Intercepta textos de status injetados no Markdown durante o modo "Ao Vivo"
+          const liveUIJunk = ['progress', 'completed', 'bracket', 'heatsin', 'heatscompleted', 'upcoming', 'round 14', 'round 16'];
+          if (liveUIJunk.some(k => l.includes(k))) return true;
+
+          const bad = ['adv.', 'advancing', 'details', 'replay', 'watch', 'results', 'spoilers', 'show', 'hide', 'dawn patrol', 'call', 'draw', 'main', 'popup', 'clear', 'apply', 'selections', 'heats', 'pts', 'points', 'total', 'tourism', 'airways', 'resort', 'surfline', 'product', 'attribute', 'color', 'size', 'price', 'item', 'shipping', 'description', 'value', 'sku', 'qty', 'quantity', 'name', 'image', 'photo', 'picture', 'live', 'in the water', 'status', 'heat status', 'watching', 'now playing'];
           return bad.some(b => l === b || l.startsWith(b + ' '));
         };
 
