@@ -66,41 +66,81 @@ export default {
         const content = await scrapeSingleUrl('https://www.worldsurfleague.com/events/' + currentYear + '/ct?all=1', 'html');
         if (!content) throw new Error("A pagina do calendario veio vazia.");
 
-        // REGEX AVANÇADO: Lê links normais HTML (/) e links injetados no JSON do React (\/)
-        const eventRegex = /(?:\\?\/)events(?:\\?\/)(\d{4})(?:\\?\/)ct(?:\\?\/)(\d+)(?:\\?\/)([^/'"?\s>#\\]+)/gi;
         const eventsFound = [];
         const seenIds = new Set();
-        let match;
 
-        while ((match = eventRegex.exec(content)) !== null) {
+        // CAMADA 1: Busca Tradicional (Links HTML Visíveis)
+        const linkRegex = /(?:\\?\/)events(?:\\?\/)(20\d{2})(?:\\?\/)ct(?:\\?\/)(\d+)(?:\\?\/)([^/'"?\s>#\\]+)/gi;
+        let match;
+        while ((match = linkRegex.exec(content)) !== null) {
           const eventYear = match[1];
           const eventId = match[2];
           const slug = match[3];
 
-          if (!seenIds.has(eventId) && !['main', 'results', 'watch', 'standings'].includes(slug)) {
+          if (!seenIds.has(eventId) && !['main', 'results', 'watch', 'standings'].includes(slug) && eventYear == currentYear) {
             seenIds.add(eventId);
             const formattedName = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-
-            // Tenta identificar se a etapa está ao vivo lendo flags ocultas no JSON da WSL
-            const isLive = content.includes('"id":' + eventId + ',"isLive":true') || content.includes('"isLive":true,"id":' + eventId);
-            const liveTag = isLive ? " (Ao Vivo)" : "";
-
+            
+            // Tenta identificar flag de Live no HTML proximo ao link
+            const isLive = content.includes(`"isLive":true,"id":${eventId}`) || content.includes(`"id":${eventId},"isLive":true`);
+            
             eventsFound.push({
               id: slug + "-" + eventId,
-              wslUrl: "https://www.worldsurfleague.com/events/" + eventYear + "/ct/" + eventId + "/" + slug + "/results",
-              name: formattedName + liveTag,
+              wslUrl: "https://www.worldsurfleague.com/events/" + currentYear + "/ct/" + eventId + "/" + slug + "/results",
+              name: formattedName,
               eventId: eventId,
-              slug: slug
+              slug: slug,
+              isLive: isLive
             });
           }
         }
 
-        // Ordena pela numeração do ID para garantir que as etapas fiquem na sequência correta
+        // CAMADA 2: Busca Profunda (Extração do JSON/Redux State da WSL)
+        // Isso resgata eventos que tiveram seus links apagados pelo Hero Banner "Ao Vivo"
+        const scripts = content.match(/<script[^>]*>([\s\S]*?)<\/script>/gi) || [];
+        scripts.forEach(script => {
+            if (script.includes('"tourId":1') || script.includes('"tour_id":1')) {
+                // Quebra o script gigante em pequenos blocos de objetos JSON
+                const chunks = script.split(/\{/);
+                chunks.forEach(chunk => {
+                    // Filtra blocos que pertençam à Primeira Divisão (CT = tourId 1)
+                    if ((chunk.includes('"tourId":1') || chunk.includes('"tour_id":1')) && chunk.includes('"slug":')) {
+                        const idMatch = chunk.match(/"id":(\d+)/);
+                        const slugMatch = chunk.match(/"slug":"([^"]+)"/);
+                        const nameMatch = chunk.match(/"name":"([^"]+)"/);
+                        const yearMatch = chunk.match(/"year":(\d{4})/);
+
+                        if (idMatch && slugMatch && nameMatch) {
+                            const eventId = idMatch[1];
+                            const slug = slugMatch[1];
+                            const name = nameMatch[1];
+                            const year = yearMatch ? yearMatch[1] : currentYear;
+
+                            // Se a etapa pertence ao ano atual e não foi achada na Camada 1, ela está "Ao Vivo"
+                            if (!seenIds.has(eventId) && !['main', 'results', 'watch'].includes(slug) && year == currentYear) {
+                                seenIds.add(eventId);
+                                eventsFound.push({
+                                    id: slug + "-" + eventId,
+                                    wslUrl: "https://www.worldsurfleague.com/events/" + currentYear + "/ct/" + eventId + "/" + slug + "/results",
+                                    name: name,
+                                    eventId: eventId,
+                                    slug: slug,
+                                    isLive: true
+                                });
+                            }
+                        }
+                    }
+                });
+            }
+        });
+
+        // CAMADA 3: Ordenação e Numeração
+        // Ordena exatamente pelo número de identificação da etapa para que Trestles não vá para o final da lista
         eventsFound.sort((a, b) => parseInt(a.eventId) - parseInt(b.eventId));
         
-        // Aplica a numeração final no nome para exibição no Dropdown
         eventsFound.forEach((ev, idx) => {
-            ev.name = (idx + 1) + ". " + ev.name;
+            const liveTag = ev.isLive ? " 🔴 (Ao Vivo)" : "";
+            ev.name = (idx + 1) + ". " + ev.name + liveTag;
         });
 
         if (eventsFound.length === 0) throw new Error("Nenhum link de etapa CT localizado.");
