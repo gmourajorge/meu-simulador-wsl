@@ -73,15 +73,16 @@
         .toast-notification { position: fixed; bottom: 20px; right: 20px; left: 20px; max-width: 400px; margin: 0 auto; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; opacity: 0; pointer-events: none; transition: 0.3s ease; transform: translateY(10px); z-index: 1000; text-align: center; }
         .toast-notification.show { opacity: 1; transform: translateY(0); }
 
-        .bracket-outer-wrapper { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 40px 24px 100px 24px; position: relative; }
-        .bracket-viewport { display: flex; gap: 40px; margin: 0 auto; width: fit-content; min-width: max-content; align-items: stretch; position: relative; }
+        /* MUDANÇAS DE CSS AQUI: flex-shrink zero e larguras fixas garantidas */
+        .bracket-outer-wrapper { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 40px 24px 100px 24px; position: relative; width: 100%; }
+        .bracket-viewport { display: flex; gap: 40px; margin: 0 auto; width: max-content; align-items: stretch; position: relative; }
 
         #svg-lines-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
 
-        .side-bracket { display: flex; gap: 40px; align-items: stretch; position: relative; z-index: 2; }
-        .center-bracket { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 220px; position: relative; z-index: 2; }
+        .side-bracket { display: flex; gap: 40px; align-items: stretch; position: relative; z-index: 2; flex-shrink: 0; }
+        .center-bracket { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 220px; min-width: 220px; position: relative; z-index: 2; flex-shrink: 0; }
 
-        .round-column { width: 200px; display: flex; flex-direction: column; align-items: stretch; }
+        .round-column { width: 220px; min-width: 220px; flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch; }
         .round-header-floating { position: absolute; bottom: 100%; left: 0; right: 0; text-align: center; font-size: 0.7rem; font-weight: 800; color: var(--wsl-text-muted); text-transform: uppercase; padding: 5px 4px; background: #e2e8f0; border-radius: 4px; margin-bottom: 8px; pointer-events: none; z-index: 10; }
 
         .heats-container { display: grid; grid-template-rows: repeat(8, 1fr); flex: 1; gap: 0; position: relative; }
@@ -174,7 +175,6 @@
         // ==========================================
         const DEV_MODE = true; 
 
-        // DADOS FALSOS PARA TESTE LOCAL (Rosters MASC e FEM Expandidos)
         const MOCK_CALENDAR = {
             sucesso: true,
             eventos: [
@@ -185,12 +185,10 @@
 
         const MOCK_BATERIAS = {
             masculino: [
-                // Round 1 Masculino (4 baterias)
                 { round: "r1", heatIdx: 0, p1: "Filipe Toledo", p2: "Ethan Ewing", winner: null },
                 { round: "r1", heatIdx: 1, p1: "Gabriel Medina", p2: "Jack Robinson", winner: null },
                 { round: "r1", heatIdx: 2, p1: "John John Florence", p2: "Griffin Colapinto", winner: null },
                 { round: "r1", heatIdx: 3, p1: "Italo Ferreira", p2: "Kanoa Igarashi", winner: null },
-                // Round 2 Masculino (16 baterias)
                 { round: "r2", heatIdx: 0, p1: "Yago Dora", p2: "Joao Chianca", winner: null },
                 { round: "r2", heatIdx: 1, p1: "Ryan Callinan", p2: "Connor O'Leary", winner: null },
                 { round: "r2", heatIdx: 2, p1: "Matthew McGillivray", p2: "Callum Robson", winner: null },
@@ -209,7 +207,6 @@
                 { round: "r2", heatIdx: 15, p1: "Shion Crawford", p2: "Aly Cleland", winner: null }
             ],
             feminino: [
-                // Round 1 Feminino (8 baterias)
                 { round: "r1", heatIdx: 0, p1: "Caitlin Simmers", p2: "Molly Picklum", winner: null },
                 { round: "r1", heatIdx: 1, p1: "Caroline Marks", p2: "Bettylou Sakura Johnson", winner: null },
                 { round: "r1", heatIdx: 2, p1: "Johanne Defay", p2: "Tatiana Weston-Webb", winner: null },
@@ -218,7 +215,6 @@
                 { round: "r1", heatIdx: 5, p1: "Carissa Moore", p2: "Sally Fitzgibbons", winner: null },
                 { round: "r1", heatIdx: 6, p1: "Luana Silva", p2: "Isabella Nichols", winner: null },
                 { round: "r1", heatIdx: 7, p1: "Sawyer Lindblad", p2: "Alyssa Spencer", winner: null },
-                // Round 2 Feminino (8 baterias)
                 { round: "r2", heatIdx: 0, p1: "Vahine Fierro", p2: "Erin Brooks", winner: null },
                 { round: "r2", heatIdx: 1, p1: "Sierra Kerr", p2: "Bella Kenworthy", winner: null },
                 { round: "r2", heatIdx: 2, p1: "Macy Callaghan", p2: "India Robinson", winner: null },
@@ -230,7 +226,6 @@
             ]
         };
 
-        // VARIÁVEIS GLOBAIS
         let wslEvents = [];
         let currentEvent = null;
         let currentCategory = 'masculino';
