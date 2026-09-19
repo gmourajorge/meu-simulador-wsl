@@ -557,13 +557,15 @@
 
         function updateSlot(heat, slot, val, isApiSync) { 
             if (isApiSync === undefined) isApiSync = false;
-            const isValPlaceholder = !val || val === 'Aguardando...' || val.includes('Vencedora') || val.includes('Vencedor');
             const hasRealSurfer = heat[slot] && heat[slot] !== 'Aguardando...' && !heat[slot].includes('Vencedora') && !heat[slot].includes('Vencedor');
 
-            if (isValPlaceholder && hasRealSurfer) return;
+            // TRAVA INTELIGENTE: Bloqueia a sobrescrita APENAS se a ordem vier da API externa.
+            // Se for uma cascata local (reset manual), PERMITE que o vazio apague o surfista.
             if (isApiSync && hasRealSurfer) return;
 
             heat[slot] = val || 'Aguardando...'; 
+            
+            // Cascata de anulação: se o surfista foi retirado do slot, ele não pode ser o vencedor desta bateria
             if (heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) {
                 heat.winner = null; 
             }
