@@ -351,15 +351,20 @@
         async function carregarInterfaceEtapa() {
             renderBanner();
             
-            await carregarPalpitesLocais(); 
+            // Se NÃO estiver em modo Dev, busca os palpites salvos no banco
+            if (!DEV_MODE) {
+                await carregarPalpitesLocais(); 
+            }
             
             const cacheKey = "wsl_api_backup_" + currentCategory + "_" + currentEvent.id;
             const backupData = await localforage.getItem(cacheKey); 
 
-            if (backupData) {
+            // Se tiver backup E NÃO estiver em modo Dev, carrega instantâneo
+            if (backupData && !DEV_MODE) {
                 aplicarBateriasSincronizadas(backupData, false, true); 
                 showToast("⚡ Etapa carregada super rápido do banco local (IndexedDB)!");
             } else {
+                // No modo Dev (ou se o cache estiver vazio), ele renderiza do zero e força o sincronismo mockado
                 recalculateCascades(true);
                 renderBracket();
                 await sincronizarWSLAuto(true); 
