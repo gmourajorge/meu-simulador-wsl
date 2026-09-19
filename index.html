@@ -558,8 +558,15 @@
 
         function updateSlot(heat, slot, val, isApiSync) { 
             if (isApiSync === undefined) isApiSync = false;
+            
+            // Verifica se o dado chegando é um texto genérico (placeholder)
+            const isValPlaceholder = !val || val === 'Aguardando...' || val.includes('Vencedora') || val.includes('Vencedor');
+            // Verifica se o slot já possui um surfista real da API
             const hasRealSurfer = heat[slot] && heat[slot] !== 'Aguardando...' && !heat[slot].includes('Vencedora') && !heat[slot].includes('Vencedor');
 
+            // A TRAVA MÁGICA DE VOLTA: Textos genéricos NUNCA podem sobrescrever surfistas reais.
+            if (isValPlaceholder && hasRealSurfer) return;
+            
             if (isApiSync && hasRealSurfer) return;
 
             heat[slot] = val || 'Aguardando...'; 
@@ -570,7 +577,30 @@
         }
 
         function resetSingleHeat(round, idx) { 
-            currentEvent.heats[currentCategory][round][idx].winner = null; 
+            const cd = currentEvent.heats[currentCategory];
+            const heat = cd[round][idx];
+            const oldWinner = heat.winner; // Guarda quem era o vencedor antes de apagar
+            
+            heat.winner = null; 
+
+            // NOVO: Apagador Inteligente em Cascata
+            // Busca o surfista cancelado em todas as rodadas seguintes e remove ele fisicamente
+            if (oldWinner) {
+                const order = ['r1', 'r2', 'r3', 'qf', 'sf', 'final'];
+                const startIndex = order.indexOf(round) + 1;
+                for (let i = startIndex; i < order.length; i++) {
+                    const nextRound = order[i];
+                    if (cd[nextRound]) {
+                        cd[nextRound].forEach(h => {
+                            if (h.p1 === oldWinner) h.p1 = 'Aguardando...';
+                            if (h.p2 === oldWinner) h.p2 = 'Aguardando...';
+                            if (h.winner === oldWinner) h.winner = null;
+                        });
+                    }
+                }
+                if (cd.champion === oldWinner) cd.champion = null;
+            }
+
             recalculateCascades(); 
             salvarPalpitesLocal(); 
             renderBracket(); 
