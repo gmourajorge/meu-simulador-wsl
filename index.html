@@ -73,16 +73,17 @@
         .toast-notification { position: fixed; bottom: 20px; right: 20px; left: 20px; max-width: 400px; margin: 0 auto; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; opacity: 0; pointer-events: none; transition: 0.3s ease; transform: translateY(10px); z-index: 1000; text-align: center; }
         .toast-notification.show { opacity: 1; transform: translateY(0); }
 
-        /* MUDANÇAS DE CSS AQUI: flex-shrink zero e larguras fixas garantidas */
+        /* MUDANÇAS DE CSS: Blindagem definitiva contra esmagamento de layout */
         .bracket-outer-wrapper { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 40px 24px 100px 24px; position: relative; width: 100%; }
-        .bracket-viewport { display: flex; gap: 40px; margin: 0 auto; width: max-content; align-items: stretch; position: relative; }
+        .bracket-viewport { display: inline-flex; gap: 40px; margin: 0 auto; align-items: stretch; position: relative; }
 
         #svg-lines-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
 
-        .side-bracket { display: flex; gap: 40px; align-items: stretch; position: relative; z-index: 2; flex-shrink: 0; }
-        .center-bracket { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 220px; min-width: 220px; position: relative; z-index: 2; flex-shrink: 0; }
+        .side-bracket { display: flex; gap: 40px; align-items: stretch; position: relative; z-index: 2; flex: 0 0 auto; }
+        .center-bracket { display: flex; flex-direction: column; justify-content: center; align-items: center; flex: 0 0 220px; width: 220px; position: relative; z-index: 2; }
 
-        .round-column { width: 220px; min-width: 220px; flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch; }
+        .round-column { flex: 0 0 220px; width: 220px; display: flex; flex-direction: column; align-items: stretch; }
+        
         .round-header-floating { position: absolute; bottom: 100%; left: 0; right: 0; text-align: center; font-size: 0.7rem; font-weight: 800; color: var(--wsl-text-muted); text-transform: uppercase; padding: 5px 4px; background: #e2e8f0; border-radius: 4px; margin-bottom: 8px; pointer-events: none; z-index: 10; }
 
         .heats-container { display: grid; grid-template-rows: repeat(8, 1fr); flex: 1; gap: 0; position: relative; }
@@ -559,13 +560,10 @@
             if (isApiSync === undefined) isApiSync = false;
             const hasRealSurfer = heat[slot] && heat[slot] !== 'Aguardando...' && !heat[slot].includes('Vencedora') && !heat[slot].includes('Vencedor');
 
-            // TRAVA INTELIGENTE: Bloqueia a sobrescrita APENAS se a ordem vier da API externa.
-            // Se for uma cascata local (reset manual), PERMITE que o vazio apague o surfista.
             if (isApiSync && hasRealSurfer) return;
 
             heat[slot] = val || 'Aguardando...'; 
             
-            // Cascata de anulação: se o surfista foi retirado do slot, ele não pode ser o vencedor desta bateria
             if (heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) {
                 heat.winner = null; 
             }
