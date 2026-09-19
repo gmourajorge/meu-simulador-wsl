@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>WSL 2026 - Simulador Pro Avançado</title>
+    
+    <!-- BANCO DE DADOS CLIENT-SIDE (IndexedDB Wrapper) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+
     <style>
         :root {
             --wsl-bg: #f8fafc;
@@ -165,12 +169,36 @@
     <div id="toastNotification" class="toast-notification"></div>
 
     <script>
+        // ==========================================
+        // CONFIGURAÇÃO DO AMBIENTE (OFFLINE/ONLINE)
+        // ==========================================
+        // Mude para "false" quando quiser consumir o Cloudflare e a WSL de verdade.
+        const DEV_MODE = true; 
+
+        // DADOS FALSOS PARA TESTE LOCAL (Não gasta créditos)
+        const MOCK_CALENDAR = {
+            sucesso: true,
+            eventos: [
+                { id: "mock-trestles-443", wslUrl: "url-fake", name: "1. Lexus Trestles Pro 🔴 (Mock Ao Vivo)", eventId: "443", slug: "lexus-trestles-pro" },
+                { id: "mock-tahiti-441", wslUrl: "url-fake", name: "2. Outerknown Tahiti Pro (Mock)", eventId: "441", slug: "outerknown-tahiti-pro" }
+            ]
+        };
+        const MOCK_BATERIAS = {
+            sucesso: true,
+            baterias: [
+                { round: "r1", heatIdx: 0, p1: "Filipe Toledo", p2: "Ethan Ewing", winner: null },
+                { round: "r1", heatIdx: 1, p1: "Gabriel Medina", p2: "Jack Robinson", winner: null }
+            ]
+        };
+
+        // VARIÁVEIS GLOBAIS
         let wslEvents = [];
         let currentEvent = null;
         let currentCategory = 'masculino';
         let globalLinksToDraw = [];
 
-        function showLoading(msg = "Carregando...") {
+        function showLoading(msg) {
+            if (!msg) msg = "Carregando...";
             const overlay = document.getElementById('loadingOverlay');
             const text = document.getElementById('loadingText');
             if (overlay && text) { text.textContent = msg; overlay.classList.add('active'); }
@@ -187,25 +215,35 @@
             setTimeout(() => t.classList.remove('show'), 4000);
         }
 
-        function escapeHTML(str) { return !str ? '' : str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+        function escapeHTML(str) { 
+            return !str ? '' : str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); 
+        }
 
         function getSurferAvatarHTML(name) {
             if (!name || name.includes('Vencedor') || name.includes('Vencedora') || name === 'Aguardando...') {
-                return `<div class="surfer-avatar placeholder"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="#64748b" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>`;
+                return '<div class="surfer-avatar placeholder"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="#64748b" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>';
             }
             const p = name.trim().split(' ');
-            return `<div class="surfer-avatar initials">${escapeHTML((p[0][0] + (p.length > 1 ? p[p.length-1][0] : '')).toUpperCase())}</div>`;
+            return '<div class="surfer-avatar initials">' + escapeHTML((p[0][0] + (p.length > 1 ? p[p.length-1][0] : '')).toUpperCase()) + '</div>';
         }
 
         function createEmptyHeats(count) {
-            return Array.from({ length: count }, (_, i) => ({ id: `h${i + 1}`, p1: 'Aguardando...', p2: 'Aguardando...', winner: null }));
+            return Array.from({ length: count }, (_, i) => ({ id: "h" + (i + 1), p1: 'Aguardando...', p2: 'Aguardando...', winner: null }));
         }
 
         async function cargarCalendarioDinamico() {
             showLoading("⏳ Conectando à WSL para carregar o calendário...");
             try {
-                const response = await fetch('/api-events');
-                const data = await response.json();
+                let data;
+
+                if (DEV_MODE) {
+                    console.log("MOCK MODE: Simulando carregamento de calendário...");
+                    await new Promise(r => setTimeout(r, 600)); 
+                    data = MOCK_CALENDAR;
+                } else {
+                    const response = await fetch('/api-events');
+                    data = await response.json();
+                }
 
                 if (!data.sucesso || !data.eventos || data.eventos.length === 0) {
                     renderErrorUI(data.mensagem || "Não foi possível estruturar o calendário remoto.");
@@ -231,78 +269,73 @@
         function renderErrorUI(mensagem) {
             const container = document.getElementById('bracketContainer');
             if (!container) return;
-            container.innerHTML = `
-                <div style="background: var(--wsl-card-bg); border: 1px solid var(--wsl-border-light); border-radius: 8px; padding: 24px; max-width: 480px; margin: 40px auto; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-                    <div style="font-size: 2.5rem; margin-bottom: 12px;">📡</div>
-                    <h3 style="color: var(--wsl-text-dark); font-size: 1.1rem; margin-bottom: 8px; font-weight: 800;">FALHA NA CONEXÃO WSL</h3>
-                    <p style="color: var(--wsl-red); font-size: 0.85rem; line-height: 1.5; margin-bottom: 20px; font-weight: 600;">
-                        Motivo: ${escapeHTML(mensagem)}
-                    </p>
-                    <div style="display: flex; justify-content: center;">
-                        <button onclick="initApp()" class="btn-sync-wsl" style="padding: 8px 16px; font-size: 0.8rem;">
-                            <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25"/><path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-linecap="round"/></svg>
-                            Tentar Novamente
-                        </button>
-                    </div>
-                </div>
-            `;
+            container.innerHTML = 
+                '<div style="background: var(--wsl-card-bg); border: 1px solid var(--wsl-border-light); border-radius: 8px; padding: 24px; max-width: 480px; margin: 40px auto; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">' +
+                    '<div style="font-size: 2.5rem; margin-bottom: 12px;">📡</div>' +
+                    '<h3 style="color: var(--wsl-text-dark); font-size: 1.1rem; margin-bottom: 8px; font-weight: 800;">FALHA NA CONEXÃO WSL</h3>' +
+                    '<p style="color: var(--wsl-red); font-size: 0.85rem; line-height: 1.5; margin-bottom: 20px; font-weight: 600;">' +
+                        'Motivo: ' + escapeHTML(mensagem) +
+                    '</p>' +
+                    '<div style="display: flex; justify-content: center;">' +
+                        '<button onclick="initApp()" class="btn-sync-wsl" style="padding: 8px 16px; font-size: 0.8rem;">' +
+                            '<svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25"/><path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-linecap="round"/></svg>' +
+                            'Tentar Novamente' +
+                        '</button>' +
+                    '</div>' +
+                '</div>';
         }
 
+        // ==========================================
+        // INTEGRAÇÃO COM IndexedDB (LOCALFORAGE)
+        // ==========================================
         function salvarPalpitesLocal() {
             if (!currentEvent) return;
-            localStorage.setItem(`wsl_picks_2026_${currentEvent.id}`, JSON.stringify(currentEvent.heats));
+            // A API assíncrona executa no fundo sem travar a interface e serializa nativamente
+            localforage.setItem("wsl_picks_2026_" + currentEvent.id, currentEvent.heats).catch(e => console.error(e));
         }
 
-        function carregarPalpitesLocais() {
+        async function carregarPalpitesLocais() {
             if (!currentEvent) return false;
-            const savedData = localStorage.getItem(`wsl_picks_2026_${currentEvent.id}`);
-            if (savedData) {
-                try {
-                    currentEvent.heats = JSON.parse(savedData);
+            try {
+                const savedData = await localforage.getItem("wsl_picks_2026_" + currentEvent.id);
+                if (savedData) {
+                    currentEvent.heats = savedData;
                     currentEvent.defined = true;
                     return true;
-                } catch (e) { console.error(e); }
-            }
+                }
+            } catch (e) { console.error(e); }
             return false;
         }
 
         async function initApp() {
-			const carregou = await cargarCalendarioDinamico();
-			if (!carregou || wslEvents.length === 0) return;
+            const carregou = await cargarCalendarioDinamico();
+            if (!carregou || wslEvents.length === 0) return;
 
-			currentEvent = wslEvents[0];
-			populateSelect();
-			carregarInterfaceEtapa();
-			window.addEventListener('resize', () => requestAnimationFrame(drawSVGLines));
+            currentEvent = wslEvents[0];
+            populateSelect();
+            await carregarInterfaceEtapa();
+            window.addEventListener('resize', () => requestAnimationFrame(drawSVGLines));
+        }
 
-			// startBackgroundSync() REVOADO: Não sincroniza mais todas as etapas em lote para economizar créditos.
-		}
-
-        // 1. CARREGAMENTO INTELIGENTE (Com uso de Cache e economia de API)
         async function carregarInterfaceEtapa() {
             renderBanner();
             
-            // Carrega os palpites que o usuário já tinha feito na simulação
-            carregarPalpitesLocais(); 
+            // Aguarda o IndexedDB puxar os palpites do usuário
+            await carregarPalpitesLocais(); 
             
-            // CHAVE DO CACHE: Verifica se já baixamos a etapa da WSL antes
-            const cacheKey = `wsl_api_backup_\({currentCategory}_\){currentEvent.id}`;
-            const backupData = localStorage.getItem(cacheKey);
+            const cacheKey = "wsl_api_backup_" + currentCategory + "_" + currentEvent.id;
+            const backupData = await localforage.getItem(cacheKey); // Extração nativa do DB
 
             if (backupData) {
-                // TEM CACHE: Aplica na tela instantaneamente, sem gastar API
-                aplicarBateriasSincronizadas(JSON.parse(backupData), false, true);
-                showToast("⚡ Etapa carregada rápido da memória local!");
-                console.log(`Etapa carregada do cache local: ${currentEvent.name}`);
+                aplicarBateriasSincronizadas(backupData, false, true); // O DB já devolve objeto pronto, sem JSON.parse
+                showToast("⚡ Etapa carregada super rápido do banco local (IndexedDB)!");
             } else {
-                // NÃO TEM CACHE: É a primeira vez abrindo a etapa. Zera a tela e busca na WSL.
                 recalculateCascades(true);
                 renderBracket();
                 await sincronizarWSLAuto(true); 
             }
         }
 
-        // 2. TROCA DE CATEGORIA LIMPA (Substitui a antiga)
         function switchCategory(cat) {
             if (currentCategory === cat) return;
             currentCategory = cat;
@@ -314,7 +347,9 @@
         function populateSelect() {
             const s = document.getElementById('eventSelect');
             s.innerHTML = '';
-            wslEvents.forEach(e => s.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+            wslEvents.forEach(e => {
+                s.innerHTML += '<option value="' + e.id + '">' + e.name + '</option>';
+            });
             s.value = currentEvent.id;
             
             s.addEventListener('change', async e => { 
@@ -341,87 +376,77 @@
             document.getElementById('btnSyncWSL').addEventListener('click', () => sincronizarWSLAuto(true));
         }
 
-        async function startBackgroundSync() {
-            const syncIcon = document.querySelector('.sync-icon');
-            const btnText = document.getElementById('btnSyncText') || document.getElementById('btnSyncWSL'); 
-            const originalText = btnText.textContent;
-            let toSync = [];
+        async function sincronizarWSLAuto(showUI) {
+            if (showUI === undefined) showUI = true;
             
-            for (let ev of wslEvents) {
-                ['masculino', 'feminino'].forEach(cat => {
-                    if (!localStorage.getItem(`wsl_api_backup_${cat}_${ev.id}`) && !localStorage.getItem(`wsl_api_failed_${cat}_${ev.id}`)) {
-                        toSync.push({ev, cat});
-                    }
-                });
-            }
-            if (toSync.length === 0) return;
-
-            if(syncIcon) syncIcon.classList.add('spinning');
-            
-            let count = 0;
-            for (let task of toSync) {
-                count++;
-                if(btnText) btnText.textContent = `PROGRESSO... ${Math.round((count/toSync.length)*100)}%`;
-                
-                try {
-                    let res = await fetch(`/api-wsl?url=${encodeURIComponent(task.ev.wslUrl)}&cat=${task.cat}`);
-                    let data = await res.json();
-                    if (data.sucesso && data.baterias && data.baterias.length > 0) {
-                        localStorage.setItem(`wsl_api_backup_${task.cat}_${task.ev.id}`, JSON.stringify(data.baterias));
-                        
-                        if (currentEvent && currentEvent.id === task.ev.id && currentCategory === task.cat) {
-                            const isEmpty = Object.values(currentEvent.heats[task.cat]).every(r => Array.isArray(r) && r.every(h => h.p1 === 'Aguardando...'));
-                            if (isEmpty) aplicarBateriasSincronizadas(data.baterias, false);
-                        }
-                    } else {
-                        localStorage.setItem(`wsl_api_failed_${task.cat}_${task.ev.id}`, 'true');
-                    }
-                } catch(e) {}
-                await new Promise(r => setTimeout(r, 1500));
-            }
-
-            if(syncIcon) syncIcon.classList.remove('spinning');
-            if(btnText) btnText.textContent = originalText;
-            showToast("✅ Todas as etapas concluídas foram baixadas!");
-        }
-
-        async function sincronizarWSLAuto(showUI = true) {
             if(showUI) {
-                showLoading(`⏳ Buscando resultados na WSL (${currentCategory.toUpperCase()})...`);
-                // EXCLUI o cache corrompido de salvamentos incorretos
-                localStorage.removeItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`);
+                showLoading("⏳ Sincronizando (Baixando Masc e Fem)...");
+                // Prepara o banco local apagando caches residuais via IndexedDB
+                await localforage.removeItem("wsl_api_backup_masculino_" + currentEvent.id);
+                await localforage.removeItem("wsl_api_backup_feminino_" + currentEvent.id);
             }
-            try {
-                const response = await fetch(`/api-wsl?url=${encodeURIComponent(currentEvent.wslUrl)}&cat=${currentCategory}`);
-                const data = await response.json();
 
-                if (!data.sucesso || !data.baterias || data.baterias.length === 0) {
+            if (DEV_MODE) {
+                console.log("MOCK MODE: Simulando fetch simultâneo das baterias...");
+                await new Promise(r => setTimeout(r, 800));
+                
+                await localforage.setItem("wsl_api_backup_masculino_" + currentEvent.id, MOCK_BATERIAS.baterias);
+                await localforage.setItem("wsl_api_backup_feminino_" + currentEvent.id, MOCK_BATERIAS.baterias);
+                
+                aplicarBateriasSincronizadas(MOCK_BATERIAS.baterias, false, true);
+                
+                if (showUI) {
+                    showToast("✅ Evento Mockado salvo no banco de dados local!");
+                    hideLoading();
+                }
+                return;
+            }
+
+            try {
+                // Download Paralelo Real
+                const reqMasc = fetch("/api-wsl?url=" + encodeURIComponent(currentEvent.wslUrl) + "&cat=masculino").then(r => r.json()).catch(() => ({ sucesso: false }));
+                const reqFem = fetch("/api-wsl?url=" + encodeURIComponent(currentEvent.wslUrl) + "&cat=feminino").then(r => r.json()).catch(() => ({ sucesso: false }));
+
+                const [dataMasc, dataFem] = await Promise.all([reqMasc, reqFem]);
+                let sucessoMasc = false;
+                let sucessoFem = false;
+
+                if (dataMasc.sucesso && dataMasc.baterias && dataMasc.baterias.length > 0) {
+                    await localforage.setItem("wsl_api_backup_masculino_" + currentEvent.id, dataMasc.baterias);
+                    if (currentCategory === 'masculino') aplicarBateriasSincronizadas(dataMasc.baterias, false, true);
+                    sucessoMasc = true;
+                }
+
+                if (dataFem.sucesso && dataFem.baterias && dataFem.baterias.length > 0) {
+                    await localforage.setItem("wsl_api_backup_feminino_" + currentEvent.id, dataFem.baterias);
+                    if (currentCategory === 'feminino') aplicarBateriasSincronizadas(dataFem.baterias, false, true);
+                    sucessoFem = true;
+                }
+
+                if (!sucessoMasc && !sucessoFem) {
                     if (showUI) {
-                        showToast(data.mensagem || `⚠️ Baterias não encontradas. Abrindo modo manual...`);
+                        showToast("⚠️ Baterias não encontradas. Abrindo modo manual...");
                         document.getElementById('manualSyncBox').classList.add('active');
                     }
-                    return;
+                } else if (showUI) {
+                    showToast("✅ Evento salvo no banco de dados local (Masc/Fem)!");
                 }
-                aplicarBateriasSincronizadas(data.baterias, true);
             } catch (err) {
                 if (showUI) {
                     showToast("⚠️ Falha na conexão automática. Abrindo modo manual...");
                     document.getElementById('manualSyncBox').classList.add('active');
                 }
             } finally {
-                if(showUI) hideLoading();
+                if (showUI) hideLoading();
             }
         }
 
-        // RESET INTELIGENTE
         function resetBracketInteligente() {
             const catHeats = currentEvent.heats[currentCategory];
 
-            // 1. FOTO DA MEMÓRIA: Copia os dados atuais do R1 e R2 antes de apagar
             const backupR1 = JSON.parse(JSON.stringify(catHeats['r1'] || []));
             const backupR2 = JSON.parse(JSON.stringify(catHeats['r2'] || []));
 
-            // 2. APAGAÇÃO TOTAL: Zera completamente a chave do simulador
             Object.keys(catHeats).forEach(roundKey => {
                 if (Array.isArray(catHeats[roundKey])) {
                     catHeats[roundKey].forEach(h => {
@@ -433,7 +458,6 @@
             });
             catHeats.champion = null;
 
-            // 3. FILTRO DE RESTAURAÇÃO: Bloqueia a volta de "Vencedor do..." 
             const isRealSurfer = (name) => name && name !== 'Aguardando...' && !name.toLowerCase().includes('vencedor');
 
             const restoreRound = (backupData, roundKey) => {
@@ -446,24 +470,22 @@
                 });
             };
 
-            // 4. MÁQUINA DO TEMPO: Devolve apenas os surfistas para o R1 e R2
             restoreRound(backupR1, 'r1');
             restoreRound(backupR2, 'r2');
 
-            // 5. RECALCULA E ATUALIZA A TELA
             recalculateCascades(false);
-            salvarPalpitesLocal();
+            salvarPalpitesLocal(); // Salva no IndexedDB
             renderBracket();
-            
-            console.log("Modo Simulação ativado: Vencedores oficiais ocultados.");
         }
 
-        // APLICAÇÃO DE BATERIAS (Protege os palpites do usuário)
-        function aplicarBateriasSincronizadas(baterias, saveBackup = true, silent = false) {
+        function aplicarBateriasSincronizadas(baterias, saveBackup, silent) {
+            if (saveBackup === undefined) saveBackup = true;
+            if (silent === undefined) silent = false;
             if (!baterias || baterias.length === 0) return;
 
             if (saveBackup) {
-                localStorage.setItem(`wsl_api_backup_${currentCategory}_${currentEvent.id}`, JSON.stringify(baterias));
+                // Background task
+                localforage.setItem("wsl_api_backup_" + currentCategory + "_" + currentEvent.id, baterias).catch(e => console.error(e));
             }
 
             const catHeats = currentEvent.heats[currentCategory];
@@ -485,26 +507,19 @@
                 if(ext.p1 && ext.p1 !== 'Aguardando...') sysHeat.p1 = ext.p1;
                 if(ext.p2 && ext.p2 !== 'Aguardando...') sysHeat.p2 = ext.p2;
                 
-                // Se a API diz que a bateria já acabou na vida real, ela sobrescreve seu palpite.
                 if (ext.winner) {
                     if (isSameSurfer(sysHeat.p1, ext.winner)) sysHeat.winner = sysHeat.p1;
                     else if (isSameSurfer(sysHeat.p2, ext.winner)) sysHeat.winner = sysHeat.p2;
                     else sysHeat.winner = ext.winner; 
                 }
-                // REMOVIDO O ELSE DESTRUTIVO: Se a bateria não aconteceu, os seus palpites locais são respeitados!
             };
-
-            let totalAtualizadas = 0;
 
             baterias.forEach((ext, idx) => {
                 if (ext.round && ext.heatIdx !== undefined && catHeats[ext.round]) {
                     const sysHeat = catHeats[ext.round][ext.heatIdx];
                     if (sysHeat) {
                         assignHeat(sysHeat, ext);
-                        totalAtualizadas++;
                     }
-                } else {
-                    console.warn("Bateria da API descartada por falta de coordenada válida:", ext);
                 }
             });
 
@@ -514,46 +529,50 @@
 
             currentEvent.defined = true;
             recalculateCascades(true); 
-            salvarPalpitesLocal();
+            salvarPalpitesLocal(); // Salva no IndexedDB
             renderBracket();
             
-            if(saveBackup && !silent) showToast(`✅ ${totalAtualizadas} baterias carregadas com sucesso!`);
+            if(saveBackup && !silent) showToast("✅ Baterias processadas com sucesso!");
         }
-		
-		// ATUALIZAR SLOT (Blinda a chave contra Placeholders)
-        function updateSlot(heat, slot, val, isApiSync = false) { 
-            // 1. Identifica se o valor que está tentando entrar é apenas um placeholder vazio
+
+        function updateSlot(heat, slot, val, isApiSync) { 
+            if (isApiSync === undefined) isApiSync = false;
             const isValPlaceholder = !val || val === 'Aguardando...' || val.includes('Vencedora') || val.includes('Vencedor');
-            
-            // 2. Identifica se o slot que vai receber o dado já possui um surfista real (ex: baixado da API)
             const hasRealSurfer = heat[slot] && heat[slot] !== 'Aguardando...' && !heat[slot].includes('Vencedora') && !heat[slot].includes('Vencedor');
 
-            // 3. A BARREIRA: Impede que o recálculo do simulador apague dados oficiais com espaços vazios
-            if (isValPlaceholder && hasRealSurfer) {
-                return; // Aborta e protege o nome do surfista
-            }
-
-            // 4. Também impede que a API sobrescreva um atleta real (caso de segurança)
-            if (isApiSync && hasRealSurfer) {
-                return;
-            }
+            if (isValPlaceholder && hasRealSurfer) return;
+            if (isApiSync && hasRealSurfer) return;
 
             heat[slot] = val || 'Aguardando...'; 
             if (heat.winner && heat.winner !== heat.p1 && heat.winner !== heat.p2) {
                 heat.winner = null; 
             }
         }
-		
-		function resetSingleHeat(round, idx) { currentEvent.heats[currentCategory][round][idx].winner = null; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
-        function setWinner(round, heatIdx, slot) { const hd = currentEvent.heats[currentCategory][round][heatIdx]; const name = slot === 1 ? hd.p1 : hd.p2; if(!name || name.includes('Vencedor') || name === 'Aguardando...') return; hd.winner = name; recalculateCascades(); salvarPalpitesLocal(); renderBracket(); }
 
-        // === Ajuste do recalculate para modo passivo na sincronização ===
-        function recalculateCascades(isApiSync = false) {
+        function resetSingleHeat(round, idx) { 
+            currentEvent.heats[currentCategory][round][idx].winner = null; 
+            recalculateCascades(); 
+            salvarPalpitesLocal(); 
+            renderBracket(); 
+        }
+
+        function setWinner(round, heatIdx, slot) { 
+            const hd = currentEvent.heats[currentCategory][round][heatIdx]; 
+            const name = slot === 1 ? hd.p1 : hd.p2; 
+            if(!name || name.includes('Vencedor') || name === 'Aguardando...') return; 
+            hd.winner = name; 
+            recalculateCascades(); 
+            salvarPalpitesLocal(); 
+            renderBracket(); 
+        }
+
+        function recalculateCascades(isApiSync) {
+            if (isApiSync === undefined) isApiSync = false;
             const cd = currentEvent.heats[currentCategory];
             if(cd.r1) cd.r1.forEach((h, i) => {
                 const w = h.winner;
-                if(currentCategory === 'masculino' && cd.r2 && cd.r2[[8,5,2,12][i]]) updateSlot(cd.r2[[8,5,2,12][i]], 'p2', w ? w : `Vencedor R1 H${i+1}`, isApiSync);
-                if(currentCategory === 'feminino' && cd.r2 && cd.r2[[4,0,2,6,1,7,3,5][i]]) updateSlot(cd.r2[[4,0,2,6,1,7,3,5][i]], 'p2', w ? w : `Vencedora R1 H${i+1}`, isApiSync);
+                if(currentCategory === 'masculino' && cd.r2 && cd.r2[[8,5,2,12][i]]) updateSlot(cd.r2[[8,5,2,12][i]], 'p2', w ? w : "Vencedor R1 H" + (i+1), isApiSync);
+                if(currentCategory === 'feminino' && cd.r2 && cd.r2[[4,0,2,6,1,7,3,5][i]]) updateSlot(cd.r2[[4,0,2,6,1,7,3,5][i]], 'p2', w ? w : "Vencedora R1 H" + (i+1), isApiSync);
             });
             ['r2','r3','qf','sf'].forEach((rnd, step) => {
                 if(!cd[rnd]) return;
@@ -571,31 +590,36 @@
             }
         }
 
-        function renderBanner() { document.getElementById('eventBanner').innerHTML = `<div class="event-meta"><h2>${currentEvent.name}</h2><p>🔗 ${currentEvent.wslUrl}</p></div>`; }
+        function renderBanner() { 
+            document.getElementById('eventBanner').innerHTML = '<div class="event-meta"><h2>' + currentEvent.name + '</h2><p>🔗 ' + currentEvent.wslUrl + '</p></div>'; 
+        }
 
         function createHeatHTML(heat, round, idx, isFinal) {
             const v1 = heat.p1 && !heat.p1.includes('Vencedor') && heat.p1 !== 'Aguardando...';
             const v2 = heat.p2 && !heat.p2.includes('Vencedor') && heat.p2 !== 'Aguardando...';
-            return `
-                <div class="heat-card ${isFinal?'final-card':''}" id="dom-${round}-${idx}">
-                    <div class="heat-title">
-                        <span>${isFinal ? 'FINAL' : `HEAT ${idx + 1}`}</span>
-                        ${heat.winner ? `<button type="button" class="btn-reset-heat" data-round="${round}" data-heat="${idx}">↺</button>` : ''}
-                    </div>
-                    <div class="surfer-slot ${heat.winner === heat.p1?'winner':''} ${!v1?'disabled':''}" data-round="${round}" data-heat="${idx}" data-slot="1">
-                        <div class="surfer-info-group">${getSurferAvatarHTML(heat.p1)} <span class="surfer-name">${escapeHTML(heat.p1)}</span></div>
-                        <span class="status-badge">${heat.winner === heat.p1 ? '✓ WIN' : 'ADV'}</span>
-                    </div>
-                    <div class="surfer-slot ${heat.winner === heat.p2?'winner':''} ${!v2?'disabled':''}" data-round="${round}" data-heat="${idx}" data-slot="2">
-                        <div class="surfer-info-group">${getSurferAvatarHTML(heat.p2)} <span class="surfer-name">${escapeHTML(heat.p2)}</span></div>
-                        <span class="status-badge">${heat.winner === heat.p2 ? '✓ WIN' : 'ADV'}</span>
-                    </div>
-                </div>`;
+            
+            let html = '<div class="heat-card ' + (isFinal ? 'final-card' : '') + '" id="dom-' + round + '-' + idx + '">';
+            html += '<div class="heat-title"><span>' + (isFinal ? 'FINAL' : 'HEAT ' + (idx + 1)) + '</span>';
+            if (heat.winner) {
+                html += '<button type="button" class="btn-reset-heat" data-round="' + round + '" data-heat="' + idx + '">↺</button>';
+            }
+            html += '</div>';
+            
+            html += '<div class="surfer-slot ' + (heat.winner === heat.p1 ? 'winner' : '') + ' ' + (!v1 ? 'disabled' : '') + '" data-round="' + round + '" data-heat="' + idx + '" data-slot="1">';
+            html += '<div class="surfer-info-group">' + getSurferAvatarHTML(heat.p1) + ' <span class="surfer-name">' + escapeHTML(heat.p1) + '</span></div>';
+            html += '<span class="status-badge">' + (heat.winner === heat.p1 ? '✓ WIN' : 'ADV') + '</span></div>';
+            
+            html += '<div class="surfer-slot ' + (heat.winner === heat.p2 ? 'winner' : '') + ' ' + (!v2 ? 'disabled' : '') + '" data-round="' + round + '" data-heat="' + idx + '" data-slot="2">';
+            html += '<div class="surfer-info-group">' + getSurferAvatarHTML(heat.p2) + ' <span class="surfer-name">' + escapeHTML(heat.p2) + '</span></div>';
+            html += '<span class="status-badge">' + (heat.winner === heat.p2 ? '✓ WIN' : 'ADV') + '</span></div>';
+            
+            html += '</div>';
+            return html;
         }
 
         function renderBracket() {
             const container = document.getElementById('bracketContainer');
-            container.innerHTML = `<svg id="svg-lines-layer"></svg>`; 
+            container.innerHTML = '<svg id="svg-lines-layer"></svg>'; 
             globalLinksToDraw = []; 
 
             const cd = currentEvent.heats[currentCategory];
@@ -608,38 +632,34 @@
                 if(!cd[r]) return;
                 const total = cd[r].length; const hTotal = Math.max(1, Math.floor(total/2));
                 const col = document.createElement('div'); col.className = 'round-column';
-                col.innerHTML = `<div class="heats-container" id="col-${r}-L"></div>`;
+                col.innerHTML = '<div class="heats-container" id="col-' + r + '-L"></div>';
                 
                 let span = 1; if (hTotal === 4) span = 2; if (hTotal === 2) span = 4; if (hTotal === 1) span = 8;
 
                 for(let i = 0; i < hTotal; i++) {
-                    let headerHTML = (i === 0) ? `<div class="round-header-floating">${rTitles[step]}</div>` : '';
-                    col.querySelector('.heats-container').innerHTML += `
-                        <div class="heat-node" style="grid-row: span ${span};">
-                            <div class="heat-card-wrapper">
-                                ${headerHTML}
-                                ${createHeatHTML(cd[r][i], r, i)}
-                            </div>
-                        </div>`;
+                    let headerHTML = (i === 0) ? '<div class="round-header-floating">' + rTitles[step] + '</div>' : '';
+                    col.querySelector('.heats-container').innerHTML += 
+                        '<div class="heat-node" style="grid-row: span ' + span + ';">' +
+                            '<div class="heat-card-wrapper">' + headerHTML + createHeatHTML(cd[r][i], r, i) + '</div>' +
+                        '</div>';
                         
                     if(r !== 'r1' && step < rRounds.length - 1) {
                         const nextRnd = rRounds[step+1];
-                        globalLinksToDraw.push({ from: `dom-${r}-${i}`, to: `dom-${nextRnd}-${Math.floor(i/2)}`, dir: 'right' });
+                        globalLinksToDraw.push({ from: "dom-" + r + "-" + i, to: "dom-" + nextRnd + "-" + Math.floor(i/2), dir: 'right' });
                     } else if (r === rRounds[rRounds.length-1] && i === 0) {
-                        globalLinksToDraw.push({ from: `dom-${r}-${i}`, to: `dom-final-0`, dir: 'right' });
+                        globalLinksToDraw.push({ from: "dom-" + r + "-" + i, to: "dom-final-0", dir: 'right' });
                     }
                 }
                 leftDiv.appendChild(col);
             });
 
             const centerDiv = document.createElement('div'); centerDiv.className = 'center-bracket';
-            centerDiv.innerHTML = `
-                <div class="heat-card-wrapper" style="width: 100%; z-index: 10;">
-                    <div class="round-header-floating">GRANDE FINAL</div>
-                    ${createHeatHTML(cd.final[0], 'final', 0, true)}
-                </div>
-                ${cd.champion ? `<div class="champion-card"><span>🏆</span><p>Campeão</p><h3>${escapeHTML(cd.champion)}</h3></div>` : ''}
-            `;
+            centerDiv.innerHTML = 
+                '<div class="heat-card-wrapper" style="width: 100%; z-index: 10;">' +
+                    '<div class="round-header-floating">GRANDE FINAL</div>' +
+                    createHeatHTML(cd.final[0], 'final', 0, true) +
+                '</div>' +
+                (cd.champion ? '<div class="champion-card"><span>🏆</span><p>Campeão</p><h3>' + escapeHTML(cd.champion) + '</h3></div>' : '');
 
             const rightDiv = document.createElement('div'); rightDiv.className = 'side-bracket right';
             const rTitlesRight = isMasc ? ['Round 1','Round 2 (B)','Oitavas (B)','Quartas (B)','Semi (B)'] : ['Round 1','Round 2 (B)','Quartas (B)','Semi (B)'];
@@ -649,26 +669,23 @@
                 const step = rRounds.length - 1 - reverseStep;
                 const total = cd[r].length; const hTotal = Math.max(1, Math.floor(total/2));
                 const col = document.createElement('div'); col.className = 'round-column';
-                col.innerHTML = `<div class="heats-container" id="col-${r}-R"></div>`;
+                col.innerHTML = '<div class="heats-container" id="col-' + r + '-R"></div>';
                 
                 let span = 1; if (hTotal === 4) span = 2; if (hTotal === 2) span = 4; if (hTotal === 1) span = 8;
 
                 const startIdx = total > 1 ? hTotal : 0;
                 for(let i = startIdx; i < total; i++) {
-                    let headerHTML = (i === startIdx) ? `<div class="round-header-floating">${rTitlesRight[step]}</div>` : '';
-                    col.querySelector('.heats-container').innerHTML += `
-                        <div class="heat-node" style="grid-row: span ${span};">
-                            <div class="heat-card-wrapper">
-                                ${headerHTML}
-                                ${createHeatHTML(cd[r][i], r, i)}
-                            </div>
-                        </div>`;
+                    let headerHTML = (i === startIdx) ? '<div class="round-header-floating">' + rTitlesRight[step] + '</div>' : '';
+                    col.querySelector('.heats-container').innerHTML += 
+                        '<div class="heat-node" style="grid-row: span ' + span + ';">' +
+                            '<div class="heat-card-wrapper">' + headerHTML + createHeatHTML(cd[r][i], r, i) + '</div>' +
+                        '</div>';
                         
                     if(r !== 'r1' && step < rRounds.length - 1) {
                         const nextRnd = rRounds[step+1];
-                        globalLinksToDraw.push({ from: `dom-${r}-${i}`, to: `dom-${nextRnd}-${Math.floor(i/2)}`, dir: 'left' });
+                        globalLinksToDraw.push({ from: "dom-" + r + "-" + i, to: "dom-" + nextRnd + "-" + Math.floor(i/2), dir: 'left' });
                     } else if (r === rRounds[rRounds.length-1] && i === (total > 1 ? 1 : 0)) {
-                        globalLinksToDraw.push({ from: `dom-${r}-${i}`, to: `dom-final-0`, dir: 'left' });
+                        globalLinksToDraw.push({ from: "dom-" + r + "-" + i, to: "dom-final-0", dir: 'left' });
                     }
                 }
                 rightDiv.appendChild(col);
@@ -696,10 +713,10 @@
                 const y1 = (r1.top + (r1.height / 2)) - containerRect.top; const y2 = (r2.top + (r2.height / 2)) - containerRect.top;
                 if (link.dir === 'right') {
                     const x1 = (r1.right - containerRect.left); const x2 = (r2.left - containerRect.left); const midX = x1 + ((x2 - x1) / 2);
-                    pathsHTML += `<path d="M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}" />`;
+                    pathsHTML += '<path d="M ' + x1 + ' ' + y1 + ' L ' + midX + ' ' + y1 + ' L ' + midX + ' ' + y2 + ' L ' + x2 + ' ' + y2 + '" />';
                 } else {
                     const x1 = (r1.left - containerRect.left); const x2 = (r2.right - containerRect.left); const midX = x1 - ((x1 - x2) / 2);
-                    pathsHTML += `<path d="M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}" />`;
+                    pathsHTML += '<path d="M ' + x1 + ' ' + y1 + ' L ' + midX + ' ' + y1 + ' L ' + midX + ' ' + y2 + ' L ' + x2 + ' ' + y2 + '" />';
                 }
             });
             svg.innerHTML = pathsHTML;
