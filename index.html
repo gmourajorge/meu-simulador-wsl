@@ -172,10 +172,9 @@
         // ==========================================
         // CONFIGURAÇÃO DO AMBIENTE (OFFLINE/ONLINE)
         // ==========================================
-        // Mude para "false" quando quiser consumir o Cloudflare e a WSL de verdade.
         const DEV_MODE = true; 
 
-        // DADOS FALSOS PARA TESTE LOCAL (Não gasta créditos)
+        // DADOS FALSOS PARA TESTE LOCAL (Rosters MASC e FEM Expandidos)
         const MOCK_CALENDAR = {
             sucesso: true,
             eventos: [
@@ -183,11 +182,51 @@
                 { id: "mock-tahiti-441", wslUrl: "url-fake", name: "2. Outerknown Tahiti Pro (Mock)", eventId: "441", slug: "outerknown-tahiti-pro" }
             ]
         };
+
         const MOCK_BATERIAS = {
-            sucesso: true,
-            baterias: [
+            masculino: [
+                // Round 1 Masculino (4 baterias)
                 { round: "r1", heatIdx: 0, p1: "Filipe Toledo", p2: "Ethan Ewing", winner: null },
-                { round: "r1", heatIdx: 1, p1: "Gabriel Medina", p2: "Jack Robinson", winner: null }
+                { round: "r1", heatIdx: 1, p1: "Gabriel Medina", p2: "Jack Robinson", winner: null },
+                { round: "r1", heatIdx: 2, p1: "John John Florence", p2: "Griffin Colapinto", winner: null },
+                { round: "r1", heatIdx: 3, p1: "Italo Ferreira", p2: "Kanoa Igarashi", winner: null },
+                // Round 2 Masculino (16 baterias)
+                { round: "r2", heatIdx: 0, p1: "Yago Dora", p2: "Joao Chianca", winner: null },
+                { round: "r2", heatIdx: 1, p1: "Ryan Callinan", p2: "Connor O'Leary", winner: null },
+                { round: "r2", heatIdx: 2, p1: "Matthew McGillivray", p2: "Callum Robson", winner: null },
+                { round: "r2", heatIdx: 3, p1: "Jordy Smith", p2: "Rio Waida", winner: null },
+                { round: "r2", heatIdx: 4, p1: "Kelly Slater", p2: "Barron Mamiya", winner: null },
+                { round: "r2", heatIdx: 5, p1: "Ian Gentil", p2: "Liam O'Brien", winner: null },
+                { round: "r2", heatIdx: 6, p1: "Caio Ibelli", p2: "Seth Moniz", winner: null },
+                { round: "r2", heatIdx: 7, p1: "Samuel Pupo", p2: "Miguel Pupo", winner: null },
+                { round: "r2", heatIdx: 8, p1: "Kolohe Andino", p2: "Nat Young", winner: null },
+                { round: "r2", heatIdx: 9, p1: "Jackson Baker", p2: "Jadson Andre", winner: null },
+                { round: "r2", heatIdx: 10, p1: "Jake Marshall", p2: "Kade Matson", winner: null },
+                { round: "r2", heatIdx: 11, p1: "Cole Houshmand", p2: "Crosby Colapinto", winner: null },
+                { round: "r2", heatIdx: 12, p1: "Eli Hanneman", p2: "Jacob Willcox", winner: null },
+                { round: "r2", heatIdx: 13, p1: "Frederico Morais", p2: "Deivid Silva", winner: null },
+                { round: "r2", heatIdx: 14, p1: "Ramzi Boukhiam", p2: "Imaikalani deVault", winner: null },
+                { round: "r2", heatIdx: 15, p1: "Shion Crawford", p2: "Aly Cleland", winner: null }
+            ],
+            feminino: [
+                // Round 1 Feminino (8 baterias)
+                { round: "r1", heatIdx: 0, p1: "Caitlin Simmers", p2: "Molly Picklum", winner: null },
+                { round: "r1", heatIdx: 1, p1: "Caroline Marks", p2: "Bettylou Sakura Johnson", winner: null },
+                { round: "r1", heatIdx: 2, p1: "Johanne Defay", p2: "Tatiana Weston-Webb", winner: null },
+                { round: "r1", heatIdx: 3, p1: "Brisa Hennessy", p2: "Gabriela Bryan", winner: null },
+                { round: "r1", heatIdx: 4, p1: "Tyler Wright", p2: "Lakey Peterson", winner: null },
+                { round: "r1", heatIdx: 5, p1: "Carissa Moore", p2: "Sally Fitzgibbons", winner: null },
+                { round: "r1", heatIdx: 6, p1: "Luana Silva", p2: "Isabella Nichols", winner: null },
+                { round: "r1", heatIdx: 7, p1: "Sawyer Lindblad", p2: "Alyssa Spencer", winner: null },
+                // Round 2 Feminino (8 baterias)
+                { round: "r2", heatIdx: 0, p1: "Vahine Fierro", p2: "Erin Brooks", winner: null },
+                { round: "r2", heatIdx: 1, p1: "Sierra Kerr", p2: "Bella Kenworthy", winner: null },
+                { round: "r2", heatIdx: 2, p1: "Macy Callaghan", p2: "India Robinson", winner: null },
+                { round: "r2", heatIdx: 3, p1: "Bronte Macaulay", p2: "Teresa Bonvalot", winner: null },
+                { round: "r2", heatIdx: 4, p1: "Nadia Erostarbe", p2: "Ellie Harrison", winner: null },
+                { round: "r2", heatIdx: 5, p1: "Alyssa Spencer", p2: "Luana Silva", winner: null },
+                { round: "r2", heatIdx: 6, p1: "Yolanda Hopkins", p2: "Francisca Veselko", winner: null },
+                { round: "r2", heatIdx: 7, p1: "Sophie McCulloch", p2: "Zoe McDougall", winner: null }
             ]
         };
 
@@ -285,12 +324,8 @@
                 '</div>';
         }
 
-        // ==========================================
-        // INTEGRAÇÃO COM IndexedDB (LOCALFORAGE)
-        // ==========================================
         function salvarPalpitesLocal() {
             if (!currentEvent) return;
-            // A API assíncrona executa no fundo sem travar a interface e serializa nativamente
             localforage.setItem("wsl_picks_2026_" + currentEvent.id, currentEvent.heats).catch(e => console.error(e));
         }
 
@@ -320,14 +355,13 @@
         async function carregarInterfaceEtapa() {
             renderBanner();
             
-            // Aguarda o IndexedDB puxar os palpites do usuário
             await carregarPalpitesLocais(); 
             
             const cacheKey = "wsl_api_backup_" + currentCategory + "_" + currentEvent.id;
-            const backupData = await localforage.getItem(cacheKey); // Extração nativa do DB
+            const backupData = await localforage.getItem(cacheKey); 
 
             if (backupData) {
-                aplicarBateriasSincronizadas(backupData, false, true); // O DB já devolve objeto pronto, sem JSON.parse
+                aplicarBateriasSincronizadas(backupData, false, true); 
                 showToast("⚡ Etapa carregada super rápido do banco local (IndexedDB)!");
             } else {
                 recalculateCascades(true);
@@ -360,8 +394,10 @@
             document.getElementById('btnMasc').addEventListener('click', () => switchCategory('masculino'));
             document.getElementById('btnFem').addEventListener('click', () => switchCategory('feminino'));
             
-            document.getElementById('btnResetAll').addEventListener('click', () => { 
-                if(confirm("Deseja apagar os resultados e voltar a simular a partir dos Rounds iniciais?")) resetBracketInteligente(); 
+            document.getElementById('btnResetAll').addEventListener('click', async () => { 
+                if(confirm("Deseja apagar todos os palpites e voltar a simular a partir das chaves originais?")) {
+                    await resetBracketInteligente(); 
+                }
             });
             
             document.getElementById('bracketContainer').addEventListener('click', e => {
@@ -381,7 +417,6 @@
             
             if(showUI) {
                 showLoading("⏳ Sincronizando (Baixando Masc e Fem)...");
-                // Prepara o banco local apagando caches residuais via IndexedDB
                 await localforage.removeItem("wsl_api_backup_masculino_" + currentEvent.id);
                 await localforage.removeItem("wsl_api_backup_feminino_" + currentEvent.id);
             }
@@ -390,20 +425,20 @@
                 console.log("MOCK MODE: Simulando fetch simultâneo das baterias...");
                 await new Promise(r => setTimeout(r, 800));
                 
-                await localforage.setItem("wsl_api_backup_masculino_" + currentEvent.id, MOCK_BATERIAS.baterias);
-                await localforage.setItem("wsl_api_backup_feminino_" + currentEvent.id, MOCK_BATERIAS.baterias);
+                await localforage.setItem("wsl_api_backup_masculino_" + currentEvent.id, MOCK_BATERIAS.masculino);
+                await localforage.setItem("wsl_api_backup_feminino_" + currentEvent.id, MOCK_BATERIAS.feminino);
                 
-                aplicarBateriasSincronizadas(MOCK_BATERIAS.baterias, false, true);
+                const bateriasMock = currentCategory === 'masculino' ? MOCK_BATERIAS.masculino : MOCK_BATERIAS.feminino;
+                aplicarBateriasSincronizadas(bateriasMock, false, true);
                 
                 if (showUI) {
-                    showToast("✅ Evento Mockado salvo no banco de dados local!");
+                    showToast("✅ Evento Mockado salvo no banco de dados local (Masc/Fem)!");
                     hideLoading();
                 }
                 return;
             }
 
             try {
-                // Download Paralelo Real
                 const reqMasc = fetch("/api-wsl?url=" + encodeURIComponent(currentEvent.wslUrl) + "&cat=masculino").then(r => r.json()).catch(() => ({ sucesso: false }));
                 const reqFem = fetch("/api-wsl?url=" + encodeURIComponent(currentEvent.wslUrl) + "&cat=feminino").then(r => r.json()).catch(() => ({ sucesso: false }));
 
@@ -441,11 +476,8 @@
             }
         }
 
-        function resetBracketInteligente() {
+        async function resetBracketInteligente() {
             const catHeats = currentEvent.heats[currentCategory];
-
-            const backupR1 = JSON.parse(JSON.stringify(catHeats['r1'] || []));
-            const backupR2 = JSON.parse(JSON.stringify(catHeats['r2'] || []));
 
             Object.keys(catHeats).forEach(roundKey => {
                 if (Array.isArray(catHeats[roundKey])) {
@@ -458,24 +490,18 @@
             });
             catHeats.champion = null;
 
-            const isRealSurfer = (name) => name && name !== 'Aguardando...' && !name.toLowerCase().includes('vencedor');
+            await localforage.removeItem("wsl_picks_2026_" + currentEvent.id);
 
-            const restoreRound = (backupData, roundKey) => {
-                if (!backupData || !catHeats[roundKey]) return;
-                backupData.forEach((backupHeat, idx) => {
-                    if (catHeats[roundKey][idx]) {
-                        if (isRealSurfer(backupHeat.p1)) catHeats[roundKey][idx].p1 = backupHeat.p1;
-                        if (isRealSurfer(backupHeat.p2)) catHeats[roundKey][idx].p2 = backupHeat.p2;
-                    }
-                });
-            };
+            const backupOficial = await localforage.getItem("wsl_api_backup_" + currentCategory + "_" + currentEvent.id);
 
-            restoreRound(backupR1, 'r1');
-            restoreRound(backupR2, 'r2');
-
-            recalculateCascades(false);
-            salvarPalpitesLocal(); // Salva no IndexedDB
-            renderBracket();
+            if (backupOficial) {
+                aplicarBateriasSincronizadas(backupOficial, false, true);
+            } else {
+                recalculateCascades(false);
+                renderBracket();
+            }
+            
+            showToast("🔄 Chaves reiniciadas para o formato oficial!");
         }
 
         function aplicarBateriasSincronizadas(baterias, saveBackup, silent) {
@@ -484,7 +510,6 @@
             if (!baterias || baterias.length === 0) return;
 
             if (saveBackup) {
-                // Background task
                 localforage.setItem("wsl_api_backup_" + currentCategory + "_" + currentEvent.id, baterias).catch(e => console.error(e));
             }
 
@@ -529,7 +554,7 @@
 
             currentEvent.defined = true;
             recalculateCascades(true); 
-            salvarPalpitesLocal(); // Salva no IndexedDB
+            salvarPalpitesLocal();
             renderBracket();
             
             if(saveBackup && !silent) showToast("✅ Baterias processadas com sucesso!");
