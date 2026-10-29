@@ -815,7 +815,9 @@
                     const w = h.winner;
                     if (isReduced) {
                         if (currentCategory === 'masculino') {
-                            if (cd.r2 && cd.r2[i]) updateSlot(cd.r2[i], 'p2', w ? w : "Vencedor R1 H" + (i+1), isApiSync);
+                            // Mapeamento cruzado exato conforme regras oficiais da WSL para campo reduzido
+                            const r2Index = [4, 0, 2, 6, 1, 7, 3, 5][i];
+                            if (cd.r2 && cd.r2[r2Index]) updateSlot(cd.r2[r2Index], 'p2', w ? w : "Vencedor R1 H" + (i+1), isApiSync);
                         } else {
                             if (cd.qf && cd.qf[Math.floor(i/2)]) updateSlot(cd.qf[Math.floor(i/2)], i%2===0 ? 'p1' : 'p2', w ? w : "Vencedora Oitavas H" + (i+1), isApiSync);
                         }
