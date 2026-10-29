@@ -305,7 +305,7 @@
         // ==========================================
         // CONFIGURAÇÃO DO AMBIENTE (OFFLINE/ONLINE)
         // ==========================================
-        const DEV_MODE = false; 
+        const DEV_MODE = true; 
 
         const MOCK_CALENDAR = {
             sucesso: true,
@@ -316,7 +316,6 @@
             ]
         };
 
-        // Formato Cheio (Pré-Corte)
         const MOCK_BATERIAS_FULL = {
             masculino: [
                 { round: "r1", heatIdx: 0, p1: "Filipe Toledo", p2: "Ethan Ewing", winner: null },
@@ -360,7 +359,6 @@
             ]
         };
 
-        // Formato Reduzido (Pós-Corte)
         const MOCK_BATERIAS_REDUCED = {
             masculino: [
                 { round: "r1", heatIdx: 0, p1: "Gabriel Medina", p2: "Seth Moniz", winner: null },
@@ -397,17 +395,13 @@
         let currentCategory = 'masculino'; 
         let globalLinksToDraw = [];
 
-        // IDs das etapas Pós-Corte
         const REDUCED_FIELD_EVENTS = ["445", "543"];
 
         function showLoading(msg) { 
             if (!msg) msg = "Carregando..."; 
             const overlay = document.getElementById('loadingOverlay'); 
             const text = document.getElementById('loadingText'); 
-            if (overlay && text) { 
-                text.textContent = msg; 
-                overlay.classList.add('active'); 
-            } 
+            if (overlay && text) { text.textContent = msg; overlay.classList.add('active'); } 
         }
 
         function hideLoading() { 
@@ -417,8 +411,7 @@
 
         function showToast(msg) { 
             const t = document.getElementById('toastNotification'); 
-            t.textContent = msg; 
-            t.classList.add('show'); 
+            t.textContent = msg; t.classList.add('show'); 
             setTimeout(() => t.classList.remove('show'), 4000); 
         }
 
@@ -426,8 +419,15 @@
             return !str ? '' : str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); 
         }
 
+        // NOVO: Função centralizada que detecta se o nome é apenas um espaço reservado da WSL
+        function isPlaceholder(name) {
+            if (!name) return true;
+            const lower = name.toLowerCase();
+            return lower === 'aguardando...' || lower.includes('vencedor') || lower.includes('vencedora') || lower.includes('heat draw') || lower.includes('tbd') || lower.includes('tbc');
+        }
+
         function getSurferAvatarHTML(name) {
-            if (!name || name.includes('Vencedor') || name.includes('Vencedora') || name === 'Aguardando...') {
+            if (isPlaceholder(name)) {
                 return '<div class="surfer-avatar placeholder"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="#64748b" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>';
             }
             const p = name.trim().split(' '); 
@@ -440,7 +440,6 @@
 
         function construirChavePorEtapa(eventId) {
             const isReduced = REDUCED_FIELD_EVENTS.includes(eventId.toString());
-            
             if (isReduced) {
                 return {
                     masculino: { r1: createEmptyHeats(8), r2: createEmptyHeats(8), qf: createEmptyHeats(4), sf: createEmptyHeats(2), final: createEmptyHeats(1), champion: null },
@@ -458,9 +457,7 @@
             showLoading("⏳ Conectando à WSL para carregar o calendário...");
             try {
                 let data;
-
                 if (DEV_MODE) {
-                    console.log("MOCK MODE: Simulando carregamento de calendário...");
                     await new Promise(r => setTimeout(r, 600)); 
                     data = MOCK_CALENDAR;
                 } else {
@@ -473,10 +470,7 @@
                     return false;
                 }
 
-                wslEvents = data.eventos.map(ev => ({
-                    ...ev,
-                    heats: construirChavePorEtapa(ev.eventId)
-                }));
+                wslEvents = data.eventos.map(ev => ({ ...ev, heats: construirChavePorEtapa(ev.eventId) }));
                 return true;
             } catch (e) {
                 renderErrorUI("Erro de conexão ao buscar o calendário oficial da WSL.");
@@ -493,15 +487,8 @@
                 '<div style="background: var(--wsl-card-bg); border: 1px solid var(--wsl-border-light); border-radius: 8px; padding: 24px; max-width: 480px; margin: 40px auto; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">' +
                     '<div style="font-size: 2.5rem; margin-bottom: 12px;">📡</div>' +
                     '<h3 style="color: var(--wsl-text-dark); font-size: 1.1rem; margin-bottom: 8px; font-weight: 800;">FALHA NA CONEXÃO WSL</h3>' +
-                    '<p style="color: var(--wsl-red); font-size: 0.85rem; line-height: 1.5; margin-bottom: 20px; font-weight: 600;">' +
-                        'Motivo: ' + escapeHTML(mensagem) +
-                    '</p>' +
-                    '<div style="display: flex; justify-content: center;">' +
-                        '<button onclick="initApp()" class="btn-sync-wsl" style="padding: 8px 16px; font-size: 0.8rem;">' +
-                            '<svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25"/><path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-linecap="round"/></svg>' +
-                            'Tentar Novamente' +
-                        '</button>' +
-                    '</div>' +
+                    '<p style="color: var(--wsl-red); font-size: 0.85rem; line-height: 1.5; margin-bottom: 20px; font-weight: 600;">Motivo: ' + escapeHTML(mensagem) + '</p>' +
+                    '<div style="display: flex; justify-content: center;"><button onclick="initApp()" class="btn-sync-wsl" style="padding: 8px 16px; font-size: 0.8rem;">Tentar Novamente</button></div>' +
                 '</div>';
         }
 
@@ -535,10 +522,7 @@
 
         async function carregarInterfaceEtapa() {
             renderBanner();
-            
-            if (!DEV_MODE) {
-                await carregarPalpitesLocais(); 
-            }
+            if (!DEV_MODE) await carregarPalpitesLocais(); 
             
             const cacheKey = "wsl_api_backup_" + currentCategory + "_" + currentEvent.id;
             const backupData = await localforage.getItem(cacheKey); 
@@ -564,9 +548,7 @@
         function populateSelect() {
             const s = document.getElementById('eventSelect');
             s.innerHTML = '';
-            wslEvents.forEach(e => {
-                s.innerHTML += '<option value="' + e.id + '">' + e.name + '</option>';
-            });
+            wslEvents.forEach(e => { s.innerHTML += '<option value="' + e.id + '">' + e.name + '</option>'; });
             s.value = currentEvent.id;
             
             s.addEventListener('change', async e => { 
@@ -597,7 +579,6 @@
 
         async function sincronizarWSLAuto(showUI) {
             if (showUI === undefined) showUI = true;
-            
             if (showUI) {
                 showLoading("⏳ Sincronizando (Baixando Masc e Fem)...");
                 await localforage.removeItem("wsl_api_backup_masculino_" + currentEvent.id);
@@ -608,19 +589,11 @@
             const mockSource = isReduced ? MOCK_BATERIAS_REDUCED : MOCK_BATERIAS_FULL;
 
             if (DEV_MODE) {
-                console.log("MOCK MODE: Simulando fetch simultâneo das baterias...");
                 await new Promise(r => setTimeout(r, 800));
-                
                 await localforage.setItem("wsl_api_backup_masculino_" + currentEvent.id, mockSource.masculino);
                 await localforage.setItem("wsl_api_backup_feminino_" + currentEvent.id, mockSource.feminino);
-                
-                const bateriasMock = currentCategory === 'masculino' ? mockSource.masculino : mockSource.feminino;
-                aplicarBateriasSincronizadas(bateriasMock, false, true);
-                
-                if (showUI) {
-                    showToast("✅ Evento Mockado salvo no banco de dados local (Masc/Fem)!");
-                    hideLoading();
-                }
+                aplicarBateriasSincronizadas(currentCategory === 'masculino' ? mockSource.masculino : mockSource.feminino, false, true);
+                if (showUI) { showToast("✅ Evento Mockado salvo no banco de dados local (Masc/Fem)!"); hideLoading(); }
                 return;
             }
 
@@ -637,7 +610,6 @@
                     if (currentCategory === 'masculino') aplicarBateriasSincronizadas(dataMasc.baterias, false, true);
                     sucessoMasc = true;
                 }
-
                 if (dataFem.sucesso && dataFem.baterias && dataFem.baterias.length > 0) {
                     await localforage.setItem("wsl_api_backup_feminino_" + currentEvent.id, dataFem.baterias);
                     if (currentCategory === 'feminino') aplicarBateriasSincronizadas(dataFem.baterias, false, true);
@@ -645,18 +617,12 @@
                 }
 
                 if (!sucessoMasc && !sucessoFem) {
-                    if (showUI) {
-                        showToast("⚠️ Baterias não encontradas. Abrindo modo manual...");
-                        document.getElementById('manualSyncBox').classList.add('active');
-                    }
+                    if (showUI) { showToast("⚠️ Baterias não encontradas. Abrindo modo manual..."); document.getElementById('manualSyncBox').classList.add('active'); }
                 } else if (showUI) {
                     showToast("✅ Evento salvo no banco de dados local (Masc/Fem)!");
                 }
             } catch (err) {
-                if (showUI) {
-                    showToast("⚠️ Falha na conexão automática. Abrindo modo manual...");
-                    document.getElementById('manualSyncBox').classList.add('active');
-                }
+                if (showUI) { showToast("⚠️ Falha na conexão automática. Abrindo modo manual..."); document.getElementById('manualSyncBox').classList.add('active'); }
             } finally {
                 if (showUI) hideLoading();
             }
@@ -664,7 +630,6 @@
 
         async function resetBracketInteligente() {
             const catHeats = currentEvent.heats[currentCategory];
-
             Object.keys(catHeats).forEach(roundKey => {
                 if (Array.isArray(catHeats[roundKey])) {
                     catHeats[roundKey].forEach(h => {
@@ -675,18 +640,15 @@
                 }
             });
             catHeats.champion = null;
-
             await localforage.removeItem("wsl_picks_2026_" + currentEvent.id);
 
             const backupOficial = await localforage.getItem("wsl_api_backup_" + currentCategory + "_" + currentEvent.id);
-
             if (backupOficial) {
                 aplicarBateriasSincronizadas(backupOficial, false, true);
             } else {
                 recalculateCascades(false);
                 renderBracket();
             }
-            
             showToast("🔄 Chaves reiniciadas para o formato oficial!");
         }
 
@@ -703,7 +665,7 @@
             if (!catHeats) return;
 
             const isSameSurfer = (fullName, shortName) => {
-                if (!fullName || !shortName || fullName === 'Aguardando...' || shortName === 'Aguardando...') return false;
+                if (isPlaceholder(fullName) || isPlaceholder(shortName)) return false;
                 const fullClean = fullName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
                 const shortClean = shortName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
                 const fullParts = fullClean.split(/\s+/);
@@ -715,8 +677,8 @@
             const assignHeat = (sysHeat, ext) => {
                 if (!sysHeat || !ext) return;
                 
-                if (ext.p1 && ext.p1 !== 'Aguardando...') sysHeat.p1 = ext.p1;
-                if (ext.p2 && ext.p2 !== 'Aguardando...') sysHeat.p2 = ext.p2;
+                if (ext.p1 && !isPlaceholder(ext.p1)) sysHeat.p1 = ext.p1;
+                if (ext.p2 && !isPlaceholder(ext.p2)) sysHeat.p2 = ext.p2;
                 
                 if (ext.winner) {
                     if (isSameSurfer(sysHeat.p1, ext.winner)) sysHeat.winner = sysHeat.p1;
@@ -728,9 +690,7 @@
             baterias.forEach((ext, idx) => {
                 if (ext.round && ext.heatIdx !== undefined && catHeats[ext.round]) {
                     const sysHeat = catHeats[ext.round][ext.heatIdx];
-                    if (sysHeat) {
-                        assignHeat(sysHeat, ext);
-                    }
+                    if (sysHeat) assignHeat(sysHeat, ext);
                 }
             });
 
@@ -748,8 +708,9 @@
 
         function updateSlot(heat, slot, val, isApiSync) { 
             if (isApiSync === undefined) isApiSync = false;
-            const isValPlaceholder = !val || val === 'Aguardando...' || val.includes('Vencedora') || val.includes('Vencedor');
-            const hasRealSurfer = heat[slot] && heat[slot] !== 'Aguardando...' && !heat[slot].includes('Vencedora') && !heat[slot].includes('Vencedor');
+            
+            const isValPlaceholder = isPlaceholder(val);
+            const hasRealSurfer = !isPlaceholder(heat[slot]);
 
             if (isValPlaceholder && hasRealSurfer) return;
             if (isApiSync && hasRealSurfer) return;
@@ -765,7 +726,6 @@
             const cd = currentEvent.heats[currentCategory];
             const heat = cd[round][idx];
             const oldWinner = heat.winner; 
-            
             heat.winner = null; 
 
             if (oldWinner) {
@@ -798,7 +758,7 @@
         function setWinner(round, heatIdx, slot) { 
             const hd = currentEvent.heats[currentCategory][round][heatIdx]; 
             const name = slot === 1 ? hd.p1 : hd.p2; 
-            if (!name || name.includes('Vencedor') || name === 'Aguardando...') return; 
+            if (isPlaceholder(name)) return; 
             hd.winner = name; 
             recalculateCascades(); 
             salvarPalpitesLocal(); 
@@ -815,7 +775,6 @@
                     const w = h.winner;
                     if (isReduced) {
                         if (currentCategory === 'masculino') {
-                            // Mapeamento cruzado exato conforme regras oficiais da WSL para campo reduzido
                             const r2Index = [4, 0, 2, 6, 1, 7, 3, 5][i];
                             if (cd.r2 && cd.r2[r2Index]) updateSlot(cd.r2[r2Index], 'p2', w ? w : "Vencedor R1 H" + (i+1), isApiSync);
                         } else {
@@ -866,8 +825,8 @@
         }
 
         function createHeatHTML(heat, round, idx, isFinal) {
-            const v1 = heat.p1 && !heat.p1.includes('Vencedor') && heat.p1 !== 'Aguardando...';
-            const v2 = heat.p2 && !heat.p2.includes('Vencedor') && heat.p2 !== 'Aguardando...';
+            const v1 = !isPlaceholder(heat.p1);
+            const v2 = !isPlaceholder(heat.p2);
             
             let html = '<div class="heat-card ' + (isFinal ? 'final-card' : '') + '" id="dom-' + round + '-' + idx + '">';
             html += '<div class="heat-title"><span>' + (isFinal ? 'FINAL' : 'HEAT ' + (idx + 1)) + '</span>';
@@ -1031,18 +990,12 @@
 
         function processarHTMLManual() {
             const html = document.getElementById('wsl-source').value;
-            if (!html || html.length < 100) { 
-                showToast("⚠️ Por favor, cole o código-fonte válido."); 
-                return; 
-            }
+            if (!html || html.length < 100) { showToast("⚠️ Por favor, cole o código-fonte válido."); return; }
             try {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
                 const heats = doc.querySelectorAll('.hot-heat, .post-event-watch-heat, .bracket-heat, [class*="Heat_container"], [class*="Match"]');
-                if (heats.length === 0) { 
-                    showToast("⚠️ Nenhuma bateria encontrada no HTML."); 
-                    return; 
-                }
+                if (heats.length === 0) { showToast("⚠️ Nenhuma bateria encontrada no HTML."); return; }
 
                 const extractedHeats = [];
                 function getCleanName(athleteEl) {
@@ -1062,8 +1015,9 @@
                     if (athletes.length >= 2) {
                         let p1 = getCleanName(athletes[0]); 
                         let p2 = getCleanName(athletes[1]);
-                        if (p1.match(/tbd|tbc/i)) p1 = 'Aguardando...'; 
-                        if (p2.match(/tbd|tbc/i)) p2 = 'Aguardando...';
+                        
+                        if (isPlaceholder(p1)) p1 = 'Aguardando...'; 
+                        if (isPlaceholder(p2)) p2 = 'Aguardando...';
                         if (p1 === 'Aguardando...' && p2 === 'Aguardando...') return;
 
                         let winner = null;
